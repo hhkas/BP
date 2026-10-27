@@ -1,0 +1,275 @@
+<meta charset="utf-8">
+<title>BP Bismaya Purchase</title>
+<meta name="robots" content="noindex,nofollow">
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap">
+<style>
+/* Layout: 상단 고정 탭바 + 단일 작업영역. 검색 결과는 좌측 품명 목록 / 우측 상세 2단, 좁은 화면에선 1단 */
+:root{
+  --bg:#f5f6f8; --surface:#ffffff; --sunk:#eceef3; --line:#d9dce5; --line-soft:#e7e9ef;
+  --fg:#1b2030; --fg-2:#4a5167; --fg-3:#7a8197;
+  --accent:#2a4d8f; --accent-soft:#e3eaf7; --accent-fg:#ffffff;
+  --sab:#b0661c; --warn:#a8540c; --warn-soft:#fbeedf; --bad:#b4282f; --bad-soft:#f9e3e4; --ok:#1f7a4d; --ok-soft:#e1f2e8;
+  --font-body:"IBM Plex Sans KR","Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif;
+  --font-mono:"IBM Plex Mono",ui-monospace,"SFMono-Regular",Consolas,monospace;
+  --r:6px;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#12151d; --surface:#1a1e29; --sunk:#222736; --line:#30364a; --line-soft:#272c3c;
+  --fg:#e6e8ef; --fg-2:#b2b7c8; --fg-3:#858ba0;
+  --accent:#8fb0ec; --accent-soft:#25314d; --accent-fg:#0f1420;
+  --sab:#e2a35f; --warn:#e8a25c; --warn-soft:#3a2a19; --bad:#f07a80; --bad-soft:#3d1f23; --ok:#6cc89a; --ok-soft:#183427;
+  color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#12151d; --surface:#1a1e29; --sunk:#222736; --line:#30364a; --line-soft:#272c3c;
+  --fg:#e6e8ef; --fg-2:#b2b7c8; --fg-3:#858ba0;
+  --accent:#8fb0ec; --accent-soft:#25314d; --accent-fg:#0f1420;
+  --sab:#e2a35f; --warn:#e8a25c; --warn-soft:#3a2a19; --bad:#f07a80; --bad-soft:#3d1f23; --ok:#6cc89a; --ok-soft:#183427;
+  color-scheme:dark}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{background:var(--bg);color:var(--fg);font-family:var(--font-body);font-size:14px;line-height:1.5}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--surface)}
+.num,.mono{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
+.wrap{max-width:1320px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+header.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:9;background:var(--surface);border-bottom:1px solid var(--line)}
+.top .wrap{display:flex;align-items:center;gap:20px;flex-wrap:wrap;padding-block:10px}
+.brand{display:flex;align-items:baseline;gap:10px}
+.brand b{font-size:16px;font-weight:700;letter-spacing:-.01em}
+.brand span{font-size:12px;color:var(--fg-3)}
+nav.tabs{display:flex;gap:2px;flex-wrap:wrap}
+nav.tabs a{padding:6px 12px;border-radius:var(--r);color:var(--fg-2);text-decoration:none;font-weight:500}
+nav.tabs a:hover{background:var(--sunk);color:var(--fg)}
+nav.tabs a[aria-current="page"]{background:var(--accent);color:var(--accent-fg)}
+main{padding-block:18px 48px}
+section.view{display:flex;flex-direction:column;gap:14px}
+h2{font-size:18px;margin:0;font-weight:700;text-wrap:balance}
+.lede{color:var(--fg-2);margin:0;max-width:72ch}
+.bar{display:flex;flex-wrap:wrap;gap:10px;align-items:end;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:12px}
+.field{display:flex;flex-direction:column;gap:4px;min-width:0}
+.field label{font-size:11px;color:var(--fg-3);letter-spacing:.04em;font-weight:500}
+input,select,textarea,button{font:inherit;color:inherit}
+input[type=text],input[type=number],select,textarea{background:var(--bg);border:1px solid var(--line);border-radius:var(--r);padding:7px 9px;min-width:0}
+input[type=text]:focus,input[type=number]:focus,select:focus,textarea:focus,button:focus-visible,a:focus-visible,tr:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.grow{flex:1 1 260px}
+#q{font-size:15px;width:100%}
+button.btn{background:var(--accent);color:var(--accent-fg);border:0;border-radius:var(--r);padding:8px 14px;font-weight:600;cursor:pointer}
+button.ghost{background:transparent;color:var(--fg-2);border:1px solid var(--line);border-radius:var(--r);padding:7px 12px;cursor:pointer}
+button.ghost:hover{color:var(--fg);border-color:var(--fg-3)}
+.hint{font-size:12px;color:var(--fg-3)}
+.split{display:grid;grid-template-columns:minmax(260px,340px) minmax(0,1fr);gap:14px;align-items:start}
+@media (max-width:860px){.split{grid-template-columns:minmax(0,1fr)}}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);min-width:0}
+.panel>.ph{padding:10px 12px;border-bottom:1px solid var(--line-soft);display:flex;justify-content:space-between;gap:8px;align-items:baseline;flex-wrap:wrap}
+.panel>.ph h3{margin:0;font-size:14px;font-weight:600}
+.panel>.pb{padding:12px;min-width:0}
+.glist{list-style:none;margin:0;padding:0;max-height:70vh;overflow:auto}
+.glist li{padding:9px 12px;border-bottom:1px solid var(--line-soft);cursor:pointer;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px}
+.glist li:hover{background:var(--sunk)}
+.glist li[aria-selected="true"]{background:var(--accent-soft)}
+.glist .gn{font-weight:600;overflow-wrap:anywhere}
+.glist .gm{font-size:12px;color:var(--fg-3);grid-column:1/-1}
+.glist .gp{font-size:12px;color:var(--fg-2);text-align:right}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:1px;background:var(--line-soft);border:1px solid var(--line-soft);border-radius:var(--r);overflow:hidden}
+.stat{background:var(--surface);padding:9px 11px}
+.stat .k{font-size:11px;color:var(--fg-3);letter-spacing:.04em}
+.stat .v{font-family:var(--font-mono);font-size:16px;font-weight:500}
+.stat .s{font-size:11px;color:var(--fg-3)}
+.tbl-wrap{overflow-x:auto;border:1px solid var(--line-soft);border-radius:var(--r)}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th,td{padding:6px 9px;text-align:left;border-bottom:1px solid var(--line-soft);white-space:nowrap}
+td.wrap-cell{white-space:normal;min-width:160px;overflow-wrap:anywhere}
+th{background:var(--sunk);font-weight:600;font-size:12px;color:var(--fg-2);position:sticky;top:0}
+th.sortable{cursor:pointer;user-select:none}
+th.sortable:hover{color:var(--fg)}
+td.r,th.r{text-align:right}
+tbody tr.click{cursor:pointer}
+tbody tr.click:hover{background:var(--sunk)}
+tbody tr.sel{background:var(--accent-soft)}
+.chip{display:inline-block;font-size:11px;padding:1px 7px;border-radius:999px;font-weight:600;white-space:nowrap}
+.chip.sab{background:var(--warn-soft);color:var(--sab)}
+.chip.iqd{background:var(--sunk);color:var(--fg-2)}
+.chip.chk{background:var(--bad-soft);color:var(--bad)}
+.chip.ok{background:var(--ok-soft);color:var(--ok)}
+.chip.warn{background:var(--warn-soft);color:var(--warn)}
+.chip.bad{background:var(--bad-soft);color:var(--bad)}
+.chip.none{background:var(--sunk);color:var(--fg-3)}
+.chart{width:100%;height:auto;display:block}
+.chart text{fill:var(--fg-3);font-family:var(--font-mono);font-size:10px}
+.chart .grid{stroke:var(--line-soft)}
+.chart .axis{stroke:var(--line)}
+.chart .pt{fill:var(--accent);fill-opacity:.75}
+.chart .pt.sab{fill:var(--sab)}
+.chart .pt.hi{stroke:var(--fg);stroke-width:1.5}
+.chart .pt.cv{fill:var(--surface);fill-opacity:1;stroke:var(--accent);stroke-width:1.4}
+.chart .pt.sab.cv{stroke:var(--sab)}
+.chart .fxl{stroke:var(--warn);stroke-width:1;stroke-dasharray:2 3;opacity:.8}
+.chart text.fxt{fill:var(--warn)}
+.basesel{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--fg-3)}
+.basesel select{padding:4px 6px;font-weight:600;color:var(--fg)}
+.chart .med{stroke:var(--fg-2);stroke-dasharray:4 3}
+.legend{display:flex;gap:14px;font-size:12px;color:var(--fg-2);flex-wrap:wrap}
+.legend i{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:5px;vertical-align:middle}
+.empty{padding:28px 12px;color:var(--fg-3);text-align:center}
+.note{font-size:12px;color:var(--fg-2);background:var(--sunk);border-radius:var(--r);padding:9px 11px;max-width:100%}
+.note b{color:var(--fg)}
+.row{display:flex;gap:14px;flex-wrap:wrap;align-items:baseline}
+.more{display:flex;justify-content:center;padding:10px}
+textarea#qt{width:100%;min-height:120px;font-family:var(--font-mono);font-size:13px}
+.ybars{display:flex;align-items:flex-end;gap:4px;height:90px}
+.ybars div{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;min-width:0;height:100%;justify-content:flex-end}
+.ybars span.b{width:100%;background:var(--accent);border-radius:2px 2px 0 0;min-height:1px}
+.ybars span.l{font-size:10px;color:var(--fg-3);font-family:var(--font-mono)}
+:root{--login-w:360px}
+#login{position:fixed;inset:0;z-index:50;background:var(--bg);display:flex;align-items:center;justify-content:center;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+#login form{width:100%;max-width:var(--login-w);background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:22px;display:flex;flex-direction:column;gap:12px}
+#login h1{margin:0;font-size:18px}
+#login p{margin:0;color:var(--fg-2);font-size:13px}
+#login input[type=password]{width:100%;font-size:15px}
+#login .err{color:var(--bad);font-size:13px;min-height:1.2em}
+#login .chk{display:flex;gap:6px;align-items:center;font-size:13px;color:var(--fg-2)}
+.app-hidden header.top,.app-hidden main{visibility:hidden}
+.spark{display:inline-flex;align-items:flex-end;gap:1px;height:22px;vertical-align:middle}
+.spark i{display:block;width:5px;background:var(--accent);opacity:.8;border-radius:1px 1px 0 0}
+.spark i.z{background:var(--line);height:1px!important;opacity:1}
+.vbars{display:flex;align-items:flex-end;gap:6px;height:150px;padding-top:16px}
+.vbars div{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:3px;min-width:0;height:100%}
+.vbars span.b{width:100%;max-width:46px;background:var(--accent);border-radius:2px 2px 0 0;min-height:1px}
+.vbars span.v{font-size:10px;color:var(--fg-2);font-family:var(--font-mono);white-space:nowrap}
+.vbars span.l{font-size:10px;color:var(--fg-3);font-family:var(--font-mono)}
+.grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+@media (max-width:860px){.grid2{grid-template-columns:minmax(0,1fr)}}
+.share{display:inline-block;height:6px;background:var(--accent);border-radius:3px;vertical-align:middle;margin-right:6px;opacity:.7}
+.crumbs{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.crumbs .chip{cursor:pointer}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<div id="login"><form id="lform" autocomplete="off">
+  <h1>BP <span style="font-weight:400;color:var(--fg-3);font-size:14px">Bismaya Purchase</span></h1>
+  <p>구매 단가·거래처 데이터는 암호화되어 있습니다. 비밀번호를 입력하세요.</p>
+  <input type="password" id="pw" placeholder="비밀번호" autocomplete="current-password" aria-label="비밀번호">
+  <label class="chk"><input type="checkbox" id="remember"> 이 브라우저에서 기억</label>
+  <div class="err" id="lerr" role="alert"></div>
+  <button class="btn" type="submit" id="lbtn">열기</button>
+</form></div>
+<header class="top"><div class="wrap">
+  <div class="brand"><b>BP</b><span style="color:var(--fg-2)">Bismaya Purchase</span><span id="meta"></span></div>
+  <nav class="tabs" aria-label="화면">
+    <a href="#search" data-v="search">통합 검색</a>
+    <a href="#vendors" data-v="vendors">거래처</a>
+    <a href="#quote" data-v="quote">견적 체크</a>
+    <a href="#recurring" data-v="recurring">반복 구매</a>
+    <a href="#spend" data-v="spend">지출 현황</a>
+    <a href="#report" data-v="report">고가 구매 리포트</a>
+    <label class="basesel" for="base">기준 통화 <select id="base"><option value="IQD">IQD</option><option value="USD">USD</option></select></label>
+    <button class="ghost" type="button" id="logout" style="padding:5px 10px;font-size:12px">잠금</button>
+  </nav>
+</div></header>
+
+<main class="wrap">
+
+<!-- 통합 검색 -->
+<section class="view" id="v-search">
+  <div class="bar">
+    <div class="field grow"><label for="q">품명 · 규격 · 자재코드 (띄어쓰기 = AND)</label><input type="text" id="q" value="safety shoes" autocomplete="off"></div>
+    <div class="field"><label for="y1">기간</label><div class="row" style="gap:4px"><select id="y1"></select><span class="hint">~</span><select id="y2"></select></div></div>
+    <div class="field"><label for="sg">현장</label><select id="sg"><option value="all">전체</option><option value="bncp">SAB 제외</option><option value="sab">SAB Airfield만</option></select></div>
+    <div class="field"><label for="cur">통화</label><select id="cur"><option value="all">전체</option><option value="0">USD</option><option value="1">IQD</option></select></div>
+  </div>
+  <p class="hint" style="margin:0">단가·금액은 상단 기준 통화로 표시합니다. 다른 통화로 산 건은 <b>발주 당시 환율</b>로 환산하고(현재 환율로 재환산하지 않음) "환산"으로 표시합니다. 2026-10-07 이후 IQD 발주의 USD 값은 신 환율 1,520으로 계산합니다.</p>
+  <div class="split">
+    <div class="panel"><div class="ph"><h3>품명별 결과</h3><span class="hint" id="gcount"></span></div><ul class="glist" id="glist" role="listbox" aria-label="품명 목록"></ul></div>
+    <div class="panel" id="detail"><div class="pb"><div class="empty">왼쪽 목록에서 품명을 고르세요.</div></div></div>
+  </div>
+</section>
+
+<!-- 거래처 -->
+<section class="view" id="v-vendors" hidden>
+  <div class="bar">
+    <div class="field grow"><label for="vq">업체명 검색</label><input type="text" id="vq" autocomplete="off" placeholder="예: Noor, Al_Muna"></div>
+    <div class="field"><label for="vsort">정렬</label><select id="vsort"><option value="usd">발주금액순</option><option value="n">라인수순</option><option value="last">최근 거래순</option></select></div>
+  </div>
+  <div class="split">
+    <div class="panel"><div class="ph"><h3>거래처</h3><span class="hint" id="vcount"></span></div><ul class="glist" id="vlist" role="listbox" aria-label="거래처 목록"></ul></div>
+    <div class="panel" id="vdetail"><div class="pb"><div class="empty">왼쪽 목록에서 업체를 고르세요.</div></div></div>
+  </div>
+</section>
+
+<!-- 견적 체크 -->
+<section class="view" id="v-quote" hidden>
+  <div>
+    <h2>견적 체크</h2>
+    <p class="lede">견적 품목을 한 줄에 하나씩 붙여넣으세요. 엑셀에서 복사해도 됩니다. 형식은 <span class="mono">품명 또는 자재코드 ⇥ 단가 ⇥ 통화(USD/IQD) ⇥ 단위</span>이고, 통화와 단위는 생략할 수 있습니다. 판정이 아니라 과거 이력 안에서의 위치만 보여줍니다.</p>
+  </div>
+  <div class="bar">
+    <div class="field" style="flex:1 1 100%"><label for="qt">견적 품목</label><textarea id="qt" spellcheck="false"></textarea></div>
+    <div class="field"><label for="qyrs">비교 기간</label><select id="qyrs"><option value="new">2026-10-07 이후 (신 환율)</option><option value="3" selected>최근 3년</option><option value="5">최근 5년</option><option value="99">전체</option></select></div>
+    <div class="field"><label for="qsg">현장</label><select id="qsg"><option value="bncp">SAB 제외</option><option value="all">전체</option><option value="sab">SAB만</option></select></div>
+    <div class="field"><label for="qcmp">비교 이력</label><select id="qcmp"><option value="all" selected>전체 (USD 발주는 당시 환율로 환산)</option><option value="same">견적과 같은 통화 발주만</option></select></div>
+    <div class="field"><label for="qfx">견적 환산 환율 (1 USD)</label><input type="number" id="qfx" value="1520" style="width:100px"></div>
+    <button class="btn" id="qrun" type="button">체크</button>
+  </div>
+  <div class="panel"><div class="pb" id="qout"></div></div>
+</section>
+
+<!-- 반복 구매 -->
+<section class="view" id="v-recurring" hidden>
+  <div>
+    <h2>반복 구매 · 소요 예측</h2>
+    <p class="lede">여러 해에 걸쳐 반복해서 산 품목입니다. 최근 12개월 수량과 최근 단가로 연간 예상 금액을 계산하니, 연간 단가계약이나 일괄구매 후보를 고를 때 쓰세요. 2023년은 데이터가 없어서 연속 구매 판단에서 빠집니다.</p>
+  </div>
+  <div class="bar">
+    <div class="field grow"><label for="rq">품명·규격·코드 필터</label><input type="text" id="rq" autocomplete="off" placeholder="비우면 전체"></div>
+    <div class="field"><label for="rcy">최소 구매 연도 수</label><select id="rcy"><option>2</option><option selected>3</option><option>5</option><option>7</option></select></div>
+    <div class="field"><label for="rsg">현장</label><select id="rsg"><option value="all">전체</option><option value="bncp" selected>SAB 제외</option><option value="sab">SAB만</option></select></div>
+    <div class="field"><label for="rrec">최근 구매</label><select id="rrec"><option value="any">상관없음</option><option value="12" selected>최근 12개월 내 구매</option><option value="24">최근 24개월 내 구매</option></select></div>
+    <div class="field"><label for="rso">정렬</label><select id="rso"><option value="est">연간 예상 금액순</option><option value="yrs">구매 연도 수순</option><option value="ord">최근 12개월 발주 횟수순</option></select></div>
+  </div>
+  <div class="stats" id="rcstats"></div>
+  <div class="panel"><div class="ph"><h3>품목</h3><span class="hint" id="rccount"></span></div><div class="pb" id="rcout"></div></div>
+</section>
+
+<!-- 지출 현황 -->
+<section class="view" id="v-spend" hidden>
+  <div>
+    <h2>지출 현황</h2>
+    <p class="lede">현장·부서별, 품목군별 발주 금액(USD 환산)입니다. 품목군은 자재코드 앞 두 자리로 묶고 대표 품명을 보고 이름을 붙인 추정 분류입니다. 표의 행을 누르면 그 조건으로 좁혀집니다.</p>
+  </div>
+  <div class="bar">
+    <div class="field"><label for="sy1">기간</label><div class="row" style="gap:4px"><select id="sy1"></select><span class="hint">~</span><select id="sy2"></select></div></div>
+    <div class="field" style="flex:1 1 200px"><label for="ssite">현장·부서</label><select id="ssite"></select></div>
+    <div class="field" style="flex:1 1 200px"><label for="scat">품목군</label><select id="scat"></select></div>
+    <button class="ghost" type="button" id="sreset">조건 초기화</button>
+  </div>
+  <div class="stats" id="sstats"></div>
+  <div class="panel"><div class="ph"><h3>연도별 발주액 (USD)</h3><span class="hint">2023년 데이터 없음</span></div><div class="pb" id="syears"></div></div>
+  <div class="grid2">
+    <div class="panel"><div class="ph"><h3>현장·부서별</h3><span class="hint" id="ssitec"></span></div><div class="pb" id="ssites"></div></div>
+    <div class="panel"><div class="ph"><h3>품목군별</h3><span class="hint" id="scatc"></span></div><div class="pb" id="scats"></div></div>
+  </div>
+  <div class="panel"><div class="ph"><h3>금액 상위 품목</h3><span class="hint">행을 누르면 통합 검색으로 이동</span></div><div class="pb" id="sitems"></div></div>
+</section>
+
+<!-- 고가 구매 리포트 -->
+<section class="view" id="v-report" hidden>
+  <div>
+    <h2>고가 구매 리포트</h2>
+    <p class="lede">기준 구간에 산 단가가 이후 같은 코드·같은 단위의 중앙단가보다 일정 배수 이상 높았던 품목을 업체별로 모읍니다. 초과액은 (당시 단가 − 이후 중앙단가) × 수량으로 계산한 추정치이고, 그 사이 시세 변동분도 들어 있습니다. 이 화면은 기준 통화와 상관없이 USD로 계산합니다. 비교 대상 기간 대부분이 USD 구매였고, 디나르 평가절하가 여러 번 있어 IQD로 바꾸면 차이가 왜곡되기 때문입니다.</p>
+  </div>
+  <div class="bar">
+    <div class="field"><label for="rcut">기준 구간 (~연도까지)</label><select id="rcut"></select></div>
+    <div class="field"><label for="rmul">비교 배수</label><select id="rmul"><option>1.3</option><option selected>1.5</option><option>2</option><option>3</option></select></div>
+    <div class="field"><label for="rmin">이후 최소 구매건수</label><select id="rmin"><option>1</option><option selected>2</option><option>3</option><option>5</option></select></div>
+    <div class="field"><label for="rex">범용 코드</label><select id="rex"><option value="1" selected>제외 (Order Product Article, Sample 등)</option><option value="0">포함</option></select></div>
+  </div>
+  <div class="split">
+    <div class="panel"><div class="ph"><h3>업체별 초과 추정</h3><span class="hint" id="rsum"></span></div><ul class="glist" id="rlist" role="listbox" aria-label="업체 목록"></ul></div>
+    <div class="panel" id="rdetail"><div class="pb"><div class="empty">왼쪽 목록에서 업체를 고르세요.</div></div></div>
+  </div>
+</section>
+
+</main>
+<script src="app.js"></script>
+
