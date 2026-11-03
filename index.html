@@ -179,6 +179,12 @@ button.sm{padding:3px 8px;font-size:12px}
 .internal{font-size:11px!important;color:var(--warn)!important;border-top:1px solid var(--line-soft);padding-top:8px}
 .internal-tag{font-size:10px;font-weight:700;letter-spacing:.06em;color:var(--warn);border:1px solid var(--warn);border-radius:3px;padding:0 4px}
 html[lang="en"] .ko{display:none}
+.chip.gA{background:var(--ok-soft);color:var(--ok)}
+.chip.gB{background:var(--accent-soft);color:var(--accent)}
+.chip.gC{background:var(--sunk);color:var(--fg-3)}
+tr.gradeC td{color:var(--fg-3)}
+tr.gradeC td .chip.cand{background:var(--sunk);color:var(--fg-3)}
+.chip.cand{background:var(--warn-soft);color:var(--warn)}
 .ko{font-weight:400;font-size:12px;color:var(--fg-3)}
 td.bestq{background:var(--ok-soft)}
 tr.totrow td{background:var(--sunk)}
@@ -209,7 +215,6 @@ main th[data-sort="asc"]::after{content:" ▴"}
     <a href="#recurring" data-v="recurring">반복 구매</a>
     <a href="#trend" data-v="trend">단가 동향</a>
     <a href="#spend" data-v="spend">지출 현황</a>
-    <a href="#report" data-v="report">고가 구매 리포트</a>
     <label class="basesel" for="lang"><select id="lang" aria-label="화면 언어"><option value="ko">한국어</option><option value="en">English</option></select></label>
     <label class="basesel" for="base">기준 통화 <select id="base"><option value="IQD">IQD</option><option value="USD">USD</option></select></label>
     <a href="#admin" class="ghost navbtn" id="adminbtn">데이터 갱신</a>
@@ -327,20 +332,22 @@ main th[data-sort="asc"]::after{content:" ▴"}
 <section class="view" id="v-trend" hidden>
   <div>
     <h2>단가 동향</h2>
-    <p class="lede">같은 자재코드·같은 단위를 다시 살 때, 직전 최대 3번 구매의 중앙 단가와 비교합니다. 원자재·물류비 상승처럼 시장 전체가 오른 만큼은 정상으로 보고, <b>같은 분기 전체 재구매 품목의 평균 변동률보다 더 오른 건</b>만 골라냅니다. 환율 영향을 빼려고 USD 기준으로 계산합니다. 확인 대상 목록이고, 바가지 여부는 사람이 판단해야 합니다.</p>
+    <p class="lede">같은 자재코드·같은 단위를 다시 살 때 <b>직전 1건의 실제 구매 단가</b>와 비교합니다. 단가 상승에는 원산지·브랜드 변경, 물류비·운임 상승(코로나 이후, 2026년 호르무즈 봉쇄), 환율 변동 같은 정상 사유가 많습니다. 그래서 오른 폭을 <b>원 변동</b>, <b>같은 구간 시장 변동</b>(우리 전체 재구매의 중앙값), <b>시장 반영 후</b>로 나눠 보여주고, 규격만으로 같은 제품인지 판단할 수 있는지를 <b>비교 신뢰도</b>로 표시합니다. 이 화면은 확인할 후보 목록이며 판정을 하지 않습니다. USD 기준입니다.</p>
+  <div class="note"><b>비교 신뢰도</b> · <span class="chip gA">A</span> 브랜드·모델·부품번호 또는 원산지가 규격에 있음 (같은 제품일 가능성 높음) · <span class="chip gB">B</span> 치수·용량 등 규격 수치만 있음 (원산지·브랜드는 다를 수 있음) · <span class="chip gC">C</span> 색상·General 등만 있어 같은 제품인지 확인 불가 (회색 표시, 업체별 집계에서 제외)</div>
   </div>
   <div class="bar">
     <div class="field"><label for="tfrom">대상 기간</label><select id="tfrom"><option value="20240101" selected>2024년 이후</option><option value="20250101">2025년 이후</option><option value="20260101">2026년 이후</option><option value="20150101">전체</option></select></div>
-    <div class="field"><label for="tth">시장 대비 초과 기준</label><select id="tth"><option value="10">+10% 이상</option><option value="20" selected>+20% 이상</option><option value="30">+30% 이상</option><option value="50">+50% 이상</option></select></div>
+    <div class="field"><label for="tth">표시 기준</label><select id="tth"><option value="10">시장 반영 후 +10% 이상</option><option value="20" selected>시장 반영 후 +20% 이상</option><option value="30">+30% 이상</option><option value="50">+50% 이상</option></select></div>
     <div class="field"><label for="tsg">현장</label><select id="tsg"><option value="all">전체</option><option value="bncp" selected>SAB 제외</option><option value="sab">SAB만</option></select></div>
+    <div class="field"><label for="tgr">비교 신뢰도</label><select id="tgr"><option value="ABC" selected>A·B·C 모두 (C는 회색)</option><option value="AB">A·B만</option><option value="A">A만</option></select></div>
     <div class="field"><label for="tanom">5배 이상 차이</label><select id="tanom"><option value="hide" selected>숨김 (단위·규격 확인 대상)</option><option value="only">이것만 보기</option></select></div>
   </div>
-  <div class="panel"><div class="ph"><h3>분기별 시장 평균 변동률</h3><span class="hint">재구매 단가 ÷ 직전 중앙 단가, USD 기준, 분기별 중앙값</span></div><div class="pb" id="tidx"></div></div>
+  <div class="panel"><div class="ph"><h3>분기별 시장 평균 변동률</h3><span class="hint">재구매 단가 ÷ 직전 구매 단가, USD 기준, 분기별 중앙값 · 아래 표는 코로나·호르무즈 전후를 가로지르는 비교에 구간별 값을 따로 씀</span></div><div class="pb" id="tidx"></div></div>
   <div class="grid2">
-    <div class="panel"><div class="ph"><h3>업체별 인상 건수</h3><span class="hint" id="tvc"></span></div><div class="pb" id="tvend"></div></div>
+    <div class="panel"><div class="ph"><h3>업체별 확인 후보 건수</h3><span class="hint" id="tvc"></span></div><div class="pb" id="tvend"></div></div>
     <div class="panel"><div class="ph"><h3>2026-10-07 환율 변경 영향</h3><span class="hint">1,320 → 1,520 (+15.2%)</span></div><div class="pb" id="tfx"></div></div>
   </div>
-  <div class="panel"><div class="ph"><h3>시장 평균보다 더 오른 구매</h3><span class="hint" id="tcount"></span></div><div class="pb" id="tout"></div></div>
+  <div class="panel"><div class="ph"><h3>시장 변동보다 더 오른 구매 (확인 후보)</h3><span class="hint" id="tcount"></span></div><div class="pb" id="tout"></div></div>
 </section>
 
 <!-- 지출 현황 -->
@@ -364,23 +371,7 @@ main th[data-sort="asc"]::after{content:" ▴"}
   <div class="panel"><div class="ph"><h3>금액 상위 품목</h3><span class="hint">행을 누르면 통합 검색으로 이동</span></div><div class="pb" id="sitems"></div></div>
 </section>
 
-<!-- 고가 구매 리포트 -->
-<section class="view" id="v-report" hidden>
-  <div>
-    <h2>고가 구매 리포트</h2>
-    <p class="lede">기준 구간에 산 단가가 이후 같은 코드·같은 단위의 중앙단가보다 일정 배수 이상 높았던 품목을 업체별로 모읍니다. 초과액은 (당시 단가 − 이후 중앙단가) × 수량으로 계산한 추정치이고, 그 사이 시세 변동분도 들어 있습니다. 이 화면은 기준 통화와 상관없이 USD로 계산합니다. 비교 대상 기간 대부분이 USD 구매였고, 디나르 평가절하가 여러 번 있어 IQD로 바꾸면 차이가 왜곡되기 때문입니다.</p>
-  </div>
-  <div class="bar">
-    <div class="field"><label for="rcut">기준 구간 (~연도까지)</label><select id="rcut"></select></div>
-    <div class="field"><label for="rmul">비교 배수</label><select id="rmul"><option>1.3</option><option selected>1.5</option><option>2</option><option>3</option></select></div>
-    <div class="field"><label for="rmin">이후 최소 구매건수</label><select id="rmin"><option>1</option><option selected>2</option><option>3</option><option>5</option></select></div>
-    <div class="field"><label for="rex">범용 코드</label><select id="rex"><option value="1" selected>제외 (Order Product Article, Sample 등)</option><option value="0">포함</option></select></div>
-  </div>
-  <div class="split">
-    <div class="panel"><div class="ph"><h3>업체별 초과 추정</h3><span class="hint" id="rsum"></span></div><ul class="glist" id="rlist" role="listbox" aria-label="업체 목록"></ul></div>
-    <div class="panel" id="rdetail"><div class="pb"><div class="empty">왼쪽 목록에서 업체를 고르세요.</div></div></div>
-  </div>
-</section>
+
 
 </main>
 

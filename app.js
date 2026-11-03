@@ -7,7 +7,7 @@ const isSAB=S.map(s=>/SAB/i.test(s));
 // 회사 시스템 환산 환율(연도별) + 2026-10-07 CBI 공식 환율 변경(1,320→1,520) 반영. [시작일, IQD per USD]
 const FX=[[20150101,1166],[20160101,1182],[20210101,1458],[20220101,1450],[20230101,1300],[20250101,1320],[20261007,1520]];
 const FX_FIX_FROM=20261007;
-const EVENTS=[[20260228,'호르무즈 해협 봉쇄']]; // 차트에 표시할 주요 사건 // 이 날짜 이후 IQD 발주는 시스템 환율(1,320) 대신 1,520으로 USD 재환산
+const EVENTS=[[20200311,'코로나19 팬데믹'],[20260228,'호르무즈 해협 봉쇄']]; // 차트에 표시할 주요 사건 // 이 날짜 이후 IQD 발주는 시스템 환율(1,320) 대신 1,520으로 USD 재환산
 const fxAt=d=>{let v=FX[0][1];for(const [s,x] of FX){if(d>=s)v=x;else break}return v};
 const n0=R.length, puU=new Float64Array(n0), puI=new Float64Array(n0), amU=new Float64Array(n0), amI=new Float64Array(n0), fxFix=new Uint8Array(n0);
 R.forEach((r,i)=>{const q=r[8],fx=fxAt(r[0]);
@@ -50,14 +50,13 @@ const med=a=>{if(!a.length)return NaN;const s=[...a].sort((x,y)=>x-y),m=s.length
 $('#meta').textContent=`${minY}–${maxY} · ${R.length.toLocaleString()}건 · 최종 ${fmtD(lastDate)}`;
 
 /* ---------- routing ---------- */
-const views=['search','vendors','quote','recurring','trend','spend','report','admin'];
+const views=['search','vendors','quote','recurring','trend','spend','admin'];
 function route(){let v=location.hash.slice(1);
   if(v.startsWith('item-')){const code=decodeURIComponent(v.slice(5));history.replaceState(null,'','#search');$('#q').value=code;y1.value=minY;y2.value=maxY;$('#sg').value='all';$('#cur').value='all';runSearch();v='search'}
   if(!views.includes(v))v='search';
   views.forEach(x=>{$('#v-'+x).hidden=x!==v});
   document.querySelectorAll('nav.tabs a').forEach(a=>a.setAttribute('aria-current',a.dataset.v===v?'page':'false'));$('#adminbtn').setAttribute('aria-current',v==='admin'?'page':'false');
   if(v==='vendors'&&!vInit){vInit=true;renderVendors()}
-  if(v==='report'&&!rInit){rInit=true;renderReport()}
   if(v==='recurring'&&!rcInit){rcInit=true;renderRecurring()}
   if(v==='spend'&&!spInit){spInit=true;initSpend()}
   if(v==='trend'&&!tInit){tInit=true;renderTrend()}
@@ -89,15 +88,16 @@ function niceStep(x){const p=Math.pow(10,Math.floor(Math.log10(x||1)));const n=x
 // flag: same code+unit+year, price >= 2x median of that year group
 const yrMedKey=new Map();
 function yearMedian(i){const r=R[i];const k=r[4]+'|'+r[6]+'|'+yr(i);if(yrMedKey.has(k))return yrMedKey.get(k);return NaN}
+const prevOf=new Int32Array(R.length).fill(-1);{const lastIdx=new Map();R.forEach((r,i)=>{if(puU[i]<=0)return;const k=r[4]+'|'+r[6];if(lastIdx.has(k))prevOf[i]=lastIdx.get(k);lastIdx.set(k,i)})}
 function buildYrMed(){yrMedKey.clear();const tmp=new Map();R.forEach((r,i)=>{if(pu[i]<=0)return;const k=r[4]+'|'+r[6]+'|'+yr(i);(tmp.get(k)||tmp.set(k,[]).get(k)).push(pu[i])});tmp.forEach((a,k)=>{if(a.length>=3)yrMedKey.set(k,med(a))})}
 buildYrMed();
 
 function lineTable(idx,opts={}){
   const lim=opts.limit||200; const rows=idx.slice(0,lim);
   let h=`<div class="tbl-wrap"><table><thead><tr><th>발주일</th><th>현장</th><th>거래처</th><th>자재코드</th><th>품명 / 규격</th><th>단위</th><th class="r">발주수량</th><th class="r">발주단가 (원통화)</th><th class="r">${CUR} 단가</th><th class="r">입고</th><th>PR</th></tr></thead><tbody>`;
-  rows.forEach(i=>{const r=R[i];const ym=yearMedian(i);const hi=isFinite(ym)&&pu[i]>=2*ym;
+  rows.forEach(i=>{const r=R[i];const pv=prevOf[i];const hi=pv>=0&&puU[pv]>0&&puU[i]>=2*puU[pv];
     const rc=r[11]<r[8]?`<span class="chip warn" title="입고수량이 발주수량보다 적음">${f(r[11])}</span>`:f(r[11]);
-    h+=`<tr><td class="num">${fmtD(r[0])}</td><td>${esc(S[r[1]])}${isSAB[r[1]]?' <span class="chip sab">SAB</span>':''}</td><td>${esc(V[r[2]])}</td><td class="mono">${esc(C[r[4]])}</td><td class="wrap-cell">${esc(N[r[3]])}${koTag(r[3])}<br><span class="hint">${esc(P[r[5]])}</span></td><td>${esc(U[r[6]])}</td><td class="r num">${f(r[8])}</td><td class="r num">${f(r[9])} <span class="chip iqd">${r[7]?'IQD':'USD'}</span></td><td class="r num">${fUSD(pu[i])}${isConv(i)?' <span class="chip none" title="발주 당시 환율 '+f(fxAt(r[0]),0)+'로 환산">환산</span>':''}${fxFix[i]&&CUR==='USD'?' <span class="chip warn" title="회사 시스템은 1,320으로 환산. BP는 2026-10-07 이후 1,520 적용">1,520</span>':''}${hi?` <span class="chip chk" title="같은 해 같은 코드 중앙단가(${fUSD(ym)})의 2배 이상">확인</span>`:''}</td><td class="r num">${rc}</td><td class="mono hint">${esc(r[12])}</td></tr>`});
+    h+=`<tr><td class="num">${fmtD(r[0])}</td><td>${esc(S[r[1]])}${isSAB[r[1]]?' <span class="chip sab">SAB</span>':''}</td><td>${esc(V[r[2]])}</td><td class="mono">${esc(C[r[4]])}</td><td class="wrap-cell">${esc(N[r[3]])}${koTag(r[3])}<br><span class="hint">${esc(P[r[5]])}</span></td><td>${esc(U[r[6]])}</td><td class="r num">${f(r[8])}</td><td class="r num">${f(r[9])} <span class="chip iqd">${r[7]?'IQD':'USD'}</span></td><td class="r num">${fUSD(pu[i])}${isConv(i)?' <span class="chip none" title="발주 당시 환율 '+f(fxAt(r[0]),0)+'로 환산">환산</span>':''}${fxFix[i]&&CUR==='USD'?' <span class="chip warn" title="회사 시스템은 1,320으로 환산. BP는 2026-10-07 이후 1,520 적용">1,520</span>':''}${hi?` <span class="chip chk" title="같은 해 같은 코드 직전 구매 단가의 2배 이상 (${fmtD(R[pv][0])}, ${esc(V[R[pv][2]])})">확인</span>`:''}</td><td class="r num">${rc}</td><td class="mono hint">${esc(r[12])}</td></tr>`});
   h+='</tbody></table></div>';
   if(idx.length>lim)h+=`<div class="more"><button class="ghost" type="button" data-more="${lim+300}">${(idx.length-lim).toLocaleString()}건 더 보기</button></div>`;
   return h;
@@ -568,40 +568,6 @@ document.addEventListener('click',ev=>{
   k.forEach(([r])=>tb.appendChild(r));
 });
 
-/* ---------- 고가 구매 리포트 ---------- */
-let rInit=false,rRes=null,rSel=null;
-const rc=$('#rcut');for(let y=minY;y<maxY-1;y++)rc.add(new Option(y+'년',y));rc.value=2016;
-const GEN=/order product article|^sample$|^general$|^-$|^$/i;
-function renderReport(){
-  const cut=+rc.value,mul=+$('#rmul').value,minN=+$('#rmin').value,ex=$('#rex').value==='1';
-  const later=new Map();R.forEach((r,i)=>{if(yr(i)<=cut||puU[i]<=0)return;const k=r[4]+'|'+r[6];(later.get(k)||later.set(k,[]).get(k)).push(puU[i])});
-  const lm=new Map();later.forEach((a,k)=>{if(a.length>=minN)lm.set(k,med(a))});
-  const early=new Map();R.forEach((r,i)=>{if(yr(i)>cut||puU[i]<=0)return;if(ex&&GEN.test(P[r[5]].trim()))return;const k=r[4]+'|'+r[6];if(!lm.has(k))return;(early.get(k)||early.set(k,[]).get(k)).push(i)});
-  const vend=new Map();let totPaid=0,totEx=0,nCodes=0;
-  early.forEach((idx,k)=>{const em=med(idx.map(i=>puU[i]));const L=lm.get(k);if(em<mul*L)return;nCodes++;
-    idx.forEach(i=>{const r=R[i];const exc=Math.max(0,puU[i]-L)*r[8];let v=vend.get(r[2]);if(!v){v={id:r[2],lines:0,codes:new Map(),paid:0,ex:0};vend.set(r[2],v)}
-      v.lines++;v.paid+=amU[i];v.ex+=exc;totPaid+=amU[i];totEx+=exc;
-      let c=v.codes.get(k);if(!c){c={i0:i,later:L,nl:later.get(k).length,q:0,paid:0,ex:0,p:[],idx:[]};v.codes.set(k,c)}c.q+=r[8];c.paid+=amU[i];c.ex+=exc;c.p.push(puU[i]);c.idx.push(i)})});
-  rRes=[...vend.values()].sort((a,b)=>b.ex-a.ex);
-  $('#rsum').textContent=`${nCodes}개 품목 · 초과 ${fUSD(totEx)} USD · USD 기준`;
-  $('#rlist').innerHTML=rRes.map(v=>`<li role="option" tabindex="0" data-r="${v.id}" aria-selected="${v.id===rSel}"><span class="gn">${esc(V[v.id])}</span><span class="gp num">${fUSD(v.ex)}</span><span class="gm">${v.codes.size}개 품목 · ${v.lines}건 · 지급 ${fUSD(v.paid)} · 비중 ${f(v.ex/totEx*100,1)}%</span></li>`).join('')||'<li class="empty" style="display:block">조건에 맞는 품목이 없습니다.</li>';
-  const keep=rRes.find(v=>v.id===rSel);selectR(keep?keep.id:(rRes[0]&&rRes[0].id));
-}
-function selectR(id){rSel=id;document.querySelectorAll('#rlist li').forEach(li=>li.setAttribute('aria-selected',String(+li.dataset.r===id)));
-  const v=rRes&&rRes.find(x=>x.id===id);const el=$('#rdetail');if(!v){el.innerHTML='<div class="pb"><div class="empty">조건에 맞는 품목이 없습니다.</div></div>';return}
-  const items=[...v.codes.values()].sort((a,b)=>b.ex-a.ex);
-  let h=`<div class="ph"><h3>${esc(V[id])}</h3><span class="hint">~${rc.value}년 구매분</span></div><div class="pb" style="display:flex;flex-direction:column;gap:14px">
-  <div class="stats"><div class="stat"><div class="k">대상 품목</div><div class="v">${v.codes.size}</div></div><div class="stat"><div class="k">발주 라인</div><div class="v">${v.lines}</div></div><div class="stat"><div class="k">지급액 (USD)</div><div class="v">${fUSD(v.paid)}</div></div><div class="stat"><div class="k">초과 추정 (USD)</div><div class="v" style="color:var(--bad)">${fUSD(v.ex)}</div></div></div>
-  <div class="tbl-wrap"><table><thead><tr><th>자재코드</th><th>품명 / 규격</th><th>단위</th><th class="r">수량</th><th class="r">당시 단가</th><th class="r">이후 중앙</th><th class="r">배수</th><th class="r">이후 건수</th><th class="r">초과 추정</th></tr></thead><tbody>`;
-  items.forEach(c=>{const r=R[c.i0];const em=med(c.p);h+=`<tr class="click" tabindex="0" data-code="${esc(C[r[4]])}"><td class="mono">${esc(C[r[4]])}</td><td class="wrap-cell">${esc(N[r[3]])}${koTag(r[3])}<br><span class="hint">${esc(P[r[5]])}</span></td><td>${esc(U[r[6]])}</td><td class="r num">${f(c.q)}</td><td class="r num">${fUSD(em)}</td><td class="r num">${fUSD(c.later)}</td><td class="r num">${f(em/c.later,1)}×</td><td class="r num">${c.nl}</td><td class="r num">${fUSD(c.ex)}</td></tr>`});
-  h+=`</tbody></table></div><p class="hint" style="margin:0">행을 누르면 통합 검색에서 그 코드의 전체 이력과 단가 추이를 봅니다. 배수가 지나치게 크면(예: 10배 이상) 규격 혼용이나 단위 오입력일 수 있으니 이력에서 확인하세요.</p></div>`;
-  el.innerHTML=h;
-  el.querySelectorAll('tr[data-code]').forEach(tr=>{const go=()=>{$('#q').value=tr.dataset.code;y1.value=minY;y2.value=maxY;$('#sg').value='all';$('#cur').value='all';location.hash='search';runSearch()};tr.onclick=go;tr.onkeydown=ev=>{if(ev.key==='Enter')go()}});
-}
-$('#rlist').addEventListener('click',ev=>{const li=ev.target.closest('li[data-r]');if(li)selectR(+li.dataset.r)});
-$('#rlist').addEventListener('keydown',ev=>{const li=ev.target.closest('li[data-r]');if(li&&ev.key==='Enter')selectR(+li.dataset.r)});
-['#rcut','#rmul','#rmin','#rex'].forEach(s=>$(s).addEventListener('change',renderReport));
-
 /* ---------- 반복 구매 · 소요 예측 ---------- */
 let rcInit=false,rcLimit=200;
 const dnum=d=>{d=String(d);return Date.UTC(+d.slice(0,4),+d.slice(4,6)-1,+d.slice(6))/864e5};
@@ -645,11 +611,11 @@ function renderRecurring(){
    <div class="stat"><div class="k">내년 예산 (시뮬레이션)</div><div class="v">${fUSD(totBud)}</div><div class="s">${CUR} · ≈ ${budOther}</div></div>`;
   $('#rccount').textContent=`${fmtD(lastDate)} 기준 최근 12개월`;
   const show=L.slice(0,rcLimit);
-  let h=`<div class="tbl-wrap"><table><thead><tr><th>자재코드</th><th>품명 / 규격</th><th>단위</th><th>연도별 수량 <span class="hint">${String(minY).slice(2)}–${String(maxY).slice(2)}</span></th><th class="r">구매 연도</th><th class="r">최근12개월 수량</th><th class="r">직전 12개월</th><th class="r">12개월 발주횟수</th><th class="r">평균 발주간격</th><th class="r">최근 단가</th><th class="r">3년 중앙단가</th><th class="r">연간 예상 (${CUR})</th><th class="r">내년 예산 (${CUR})</th></tr></thead><tbody>`;
+  let h=`<div class="tbl-wrap"><table><thead><tr><th>자재코드</th><th>품명 / 규격</th><th>단위</th><th>연도별 수량 <span class="hint">${String(minY).slice(2)}–${String(maxY).slice(2)}</span></th><th class="r">구매 연도</th><th class="r">최근12개월 수량</th><th class="r">직전 12개월</th><th class="r">12개월 발주횟수</th><th class="r">평균 발주간격</th><th class="r">최근 단가</th><th class="r">직전 구매 단가</th><th class="r">직전 대비</th><th class="r">연간 예상 (${CUR})</th><th class="r">내년 예산 (${CUR})</th></tr></thead><tbody>`;
   show.forEach(x=>{const r=R[x.i0];const mx=Math.max(...Object.values(x.yq),1);
     const sp=yearsAll.map(y=>{const q=x.yq[y]||0;return q?`<i style="height:${Math.max(2,q/mx*22)}px" title="${y}: ${f(q)}"></i>`:`<i class="z" title="${y}: 0"></i>`}).join('');
     const prev=x.q24-x.q12;
-    h+=`<tr class="click" tabindex="0" data-code="${esc(C[r[4]])}"><td class="mono">${esc(C[r[4]])}</td><td class="wrap-cell">${esc(N[r[3]])}${koTag(r[3])}<br><span class="hint">${esc(P[r[5]])}</span></td><td>${esc(U[r[6]])}</td><td><span class="spark">${sp}</span></td><td class="r num">${x.yrs.size}${x.consec?' <span class="chip ok" title="2024·2025·2026 모두 구매">연속</span>':''}</td><td class="r num">${f(x.q12)}</td><td class="r num">${f(prev)}</td><td class="r num">${x.o12}</td><td class="r num">${isFinite(x.gap)?f(x.gap,0)+'일':'–'}</td><td class="r num">${fUSD(x.lp)}</td><td class="r num">${fUSD(med(x.p3))}</td><td class="r num"><b>${fUSD(x.est)}</b></td><td class="r num">${fUSD(x.bud)}</td></tr>`});
+    h+=`<tr class="click" tabindex="0" data-code="${esc(C[r[4]])}"><td class="mono">${esc(C[r[4]])}</td><td class="wrap-cell">${esc(N[r[3]])}${koTag(r[3])}<br><span class="hint">${esc(P[r[5]])}</span></td><td>${esc(U[r[6]])}</td><td><span class="spark">${sp}</span></td><td class="r num">${x.yrs.size}${x.consec?' <span class="chip ok" title="2024·2025·2026 모두 구매">연속</span>':''}</td><td class="r num">${f(x.q12)}</td><td class="r num">${f(prev)}</td><td class="r num">${x.o12}</td><td class="r num">${isFinite(x.gap)?f(x.gap,0)+'일':'–'}</td><td class="r num">${fUSD(x.lp)}</td>${(()=>{const pv=prevOf[x.last];if(pv<0)return '<td class="r hint">–</td><td></td>';const ch=(puU[x.last]/puU[pv]-1)*100;return `<td class="r num">${fUSD(pu[pv])}<br><span class="hint">${fmtD(R[pv][0])}</span></td><td class="r num">${ch>0?'+':''}${f(ch,0)}%</td>`})()}<td class="r num"><b>${fUSD(x.est)}</b></td><td class="r num">${fUSD(x.bud)}</td></tr>`});
   h+='</tbody></table></div>';
   if(L.length>rcLimit)h+=`<div class="more"><button class="ghost" type="button" id="rcmore">${(L.length-rcLimit).toLocaleString()}개 더 보기</button></div>`;
   h+=`<p class="hint" style="margin:10px 0 0">평균 발주간격은 최근 3년 안의 발주일 기준입니다. 공사 물량이 많던 2015–2020년과 지금은 소요량 차이가 크니, 예측은 최근 12개월과 직전 12개월을 비교해서 보세요.</p>`;
@@ -722,14 +688,23 @@ $('#abuild').onclick=async()=>{
 /* ---------- 단가 동향 ---------- */
 let tInit=false,tLimit=200;
 const qOf=d=>Math.floor(d/10000)+'-Q'+(Math.floor((Math.floor(d/100)%100-1)/3)+1);
+// 비교 신뢰도: 규격(+품명)만 보고 같은 제품인지 판단 가능한 정도
+const BRANDS=/\b(kia|toyota|hyundai|nissan|caterpillar|cat|komatsu|volvo|doosan|bobcat|jcb|hilti|makita|bosch|dewalt|stanley|samsung|lg|daikin|carrier|york|gree|sika|fosroc|jotun|3m|schneider|abb|siemens|legrand|philips|osram|nsk|skf|fag|ntn|timken|gates|mobil|shell|total|castrol|perkins|cummins|deutz|lister|honda|yamaha|kohler|grundfos|pedrollo|lowara|ebara|wilo|loctite|henkel|fischer|knauf)\b/i;
+const ORIGIN=/\b(korea|korean|china|chinese|turkey|turkish|iran|india|japan|germany|german|italy|italian|uae|saudi|egypt|europe|origin)\b/i;
+function gradeOf(i){const sp=P[R[i][5]]||'',nm=N[R[i][3]]||'';const s=sp.trim();
+  if(BRANDS.test(sp)||BRANDS.test(nm)||ORIGIN.test(sp)||/\b(?=[A-Z0-9\-]*[A-Z])(?=[A-Z0-9\-]*\d)[A-Z0-9][A-Z0-9\-]{4,}\b/.test(sp))return 'A';
+  if(!s||/^(color|colour)\s*:/i.test(s)||/^(general|sample|order product article|standard|normal|local|-|na|n\/a)$/i.test(s)||!/\d/.test(s))return 'C';
+  return 'B'}
+const SEGS=EVENTS.map(e=>e[0]);
+const segOf=d=>SEGS.filter(x=>d>=x).length;
 function renderTrend(){
   const from=+$('#tfrom').value,th=+$('#tth').value/100,sg=$('#tsg').value,anom=$('#tanom').value;
   // 재구매 비율 계산 (USD 기준, 코드+단위)
   const hist=new Map(),ev=[];
   for(let i=0;i<R.length;i++){const r=R[i];if(puU[i]<=0)continue;if(sg==='bncp'&&isSAB[r[1]])continue;if(sg==='sab'&&!isSAB[r[1]])continue;
     const k=r[4]+'|'+r[6];const h=hist.get(k)||[];
-    if(h.length&&r[0]>=from){const prev=h.slice(-3);const pm=med(prev.map(j=>puU[j]));const ratio=puU[i]/pm;const pj=h[h.length-1];
-      ev.push({i,ratio,pm,pj,q:qOf(r[0]),vch:R[pj][2]!==r[2]})}
+    if(h.length&&r[0]>=from){const pj=h[h.length-1];const pm=puU[pj];const ratio=puU[i]/pm;
+      ev.push({i,ratio,pm,pj,q:qOf(r[0]),vch:R[pj][2]!==r[2],sp:segOf(R[pj][0]),sc:segOf(r[0]),g:gradeOf(i)})}
     h.push(i);hist.set(k,h)}
   const norm=ev.filter(e=>e.ratio<5&&e.ratio>0.2);
   const qm=new Map();norm.forEach(e=>{(qm.get(e.q)||qm.set(e.q,[]).get(e.q)).push(e.ratio)});
@@ -737,18 +712,25 @@ function renderTrend(){
   // 분기 지수 막대
   const qs=[...qIdx.keys()].sort();const mx=Math.max(...qs.map(q=>Math.abs(qIdx.get(q).m-1)),0.05);
   $('#tidx').innerHTML=qs.length?`<div class="qbars">${qs.map(q=>{const x=qIdx.get(q),v=(x.m-1)*100;return `<div title="${q}: 중앙 ${v>0?'+':''}${f(v,1)}% · ${x.n}건"><span class="v">${v>0?'+':''}${f(v,0)}%</span><span class="b ${v<0?'neg':''}" style="height:${Math.max(2,Math.abs(x.m-1)/mx*70)}px"></span><span class="l">${q.slice(2)}</span><span class="hint">${x.n}건</span></div>`}).join('')}</div><p class="hint" style="margin:8px 0 0">재구매 건수가 적은 분기(10건 미만)는 평균이 크게 흔들립니다.</p>`:'<div class="empty">재구매 데이터가 없습니다.</div>';
-  // 시장 대비 초과
-  let list=(anom==='only'?ev.filter(e=>e.ratio>=5||e.ratio<=0.2):norm.filter(e=>{const m=qIdx.get(e.q).m;e.mk=m;e.ex=e.ratio/m-1;return e.ex>=th}));
-  list.forEach(e=>{e.mk=e.mk||qIdx.get(e.q)?.m||1;e.ex=e.ratio/e.mk-1});
-  list.sort((a,b)=>b.ex-a.ex);
+  // 같은 구간 시장 변동: 같은 구간 안 비교 → 분기 중앙값, 사건(코로나·호르무즈)을 가로지르는 비교 → 그 구간 조합의 중앙값
+  const xm=new Map();norm.forEach(e=>{if(e.sp!==e.sc){const k=e.sp+'>'+e.sc;(xm.get(k)||xm.set(k,[]).get(k)).push(e.ratio)}});
+  const xIdx=new Map([...xm.entries()].filter(([,a])=>a.length>=10).map(([k,a])=>[k,{m:med(a),n:a.length}]));
+  const segName=s=>s===0?'코로나 이전':s===1?'코로나 이후':'호르무즈 봉쇄 이후';
+  ev.forEach(e=>{const xk=e.sp+'>'+e.sc;if(e.sp!==e.sc&&xIdx.has(xk)){const x=xIdx.get(xk);e.mk=x.m;e.mkl=`${segName(e.sp)}→${segName(e.sc)} ${x.n}건`}else{const x=qIdx.get(e.q);e.mk=x?x.m:1;e.mkl=`${e.q} 분기 ${x?x.n:0}건`}e.ex=e.ratio/e.mk-1});
+  const gsel=$('#tgr').value;
+  let list=(anom==='only'?ev.filter(e=>e.ratio>=5||e.ratio<=0.2):norm.filter(e=>e.ex>=th)).filter(e=>gsel.includes(e.g));
+  list.sort((a,b)=>(a.g==='C')-(b.g==='C')||b.ex-a.ex);
+  const crossTxt=[...xIdx.entries()].map(([k,x])=>{const [a,b]=k.split('>').map(Number);return `${segName(a)}→${segName(b)}: ${x.m>=1?'+':''}${f((x.m-1)*100,1)}% (${x.n}건)`}).join(' · ');
+  if(crossTxt)$('#tidx').insertAdjacentHTML('beforeend',`<p class="hint" style="margin:4px 0 0"><b>사건을 사이에 둔 비교의 시장 변동</b> · ${crossTxt}</p>`);
   $('#tcount').textContent=`${list.length.toLocaleString()}건 / 재구매 ${ev.length.toLocaleString()}건`;
-  const vs=new Map();list.forEach(e=>{const v=R[e.i][2];const x=vs.get(v)||{n:0,ex:[],codes:new Set()};x.n++;x.ex.push(e.ex);x.codes.add(R[e.i][4]);vs.set(v,x)});
+  const vs=new Map();list.filter(e=>e.g!=='C'&&anom!=='only').forEach(e=>{const v=R[e.i][2];const x=vs.get(v)||{n:0,ex:[],codes:new Set()};x.n++;x.ex.push(e.ex);x.codes.add(R[e.i][4]);vs.set(v,x)});
   const vl=[...vs.entries()].sort((a,b)=>b[1].n-a[1].n);
   $('#tvc').textContent=`${vl.length}개사`;
-  $('#tvend').innerHTML=vl.length?`<div class="tbl-wrap" style="max-height:340px;overflow:auto"><table><thead><tr><th>업체</th><th class="r">건수</th><th class="r">품목</th><th class="r">시장 대비 초과 (중앙)</th></tr></thead><tbody>${vl.map(([v,x])=>`<tr><td>${esc(V[v])}</td><td class="r num">${x.n}</td><td class="r num">${x.codes.size}</td><td class="r num">+${f(med(x.ex)*100,0)}%</td></tr>`).join('')}</tbody></table></div>`:'<div class="empty">해당 없음</div>';
-  let h=`<div class="tbl-wrap"><table><thead><tr><th>발주일</th><th>품목</th><th>단위</th><th>이번 업체</th><th class="r">이번 단가 (USD)</th><th>직전 업체</th><th class="r">직전 중앙 단가 (USD)</th><th class="r">변동</th><th class="r">시장 평균</th><th class="r">시장 대비 초과</th></tr></thead><tbody>`;
+  $('#tvend').innerHTML=vl.length?`<div class="tbl-wrap" style="max-height:340px;overflow:auto"><table><thead><tr><th>업체</th><th class="r">건수</th><th class="r">품목</th><th class="r">시장 반영 후 (중앙)</th></tr></thead><tbody>${vl.map(([v,x])=>`<tr><td>${esc(V[v])}</td><td class="r num">${x.n}</td><td class="r num">${x.codes.size}</td><td class="r num">+${f(med(x.ex)*100,0)}%</td></tr>`).join('')}</tbody></table></div>`:'<div class="empty">해당 없음</div>';
+  const GT={A:'브랜드·모델·부품번호 또는 원산지 기재',B:'치수·용량 등 수치만 기재 (원산지·브랜드는 다를 수 있음)',C:'색상 등만 기재 · 같은 제품인지 확인 불가'};
+  let h=`<div class="tbl-wrap"><table><thead><tr><th>발주일</th><th>품목</th><th>단위</th><th>비교 신뢰도</th><th>업체 (직전 → 이번)</th><th class="r">단가 USD (직전 → 이번)</th><th class="r">원 변동</th><th class="r">같은 구간 시장 변동</th><th class="r">시장 반영 후</th></tr></thead><tbody>`;
   list.slice(0,tLimit).forEach(e=>{const r=R[e.i],pr=R[e.pj];
-    h+=`<tr class="click" tabindex="0" data-code="${esc(C[r[4]])}"><td class="num">${fmtD(r[0])}</td><td class="wrap-cell">${esc(N[r[3]])}${koTag(r[3])}<br><span class="hint">${esc(P[r[5]])} · ${esc(C[r[4]])}</span></td><td>${esc(U[r[6]])}</td><td>${esc(V[r[2]])}${e.vch?' <span class="chip none">업체 변경</span>':''}</td><td class="r num">${fUSD(puU[e.i])}</td><td>${esc(V[pr[2]])}</td><td class="r num">${fUSD(e.pm)}</td><td class="r num">${e.ratio>=1?'+':''}${f((e.ratio-1)*100,0)}%</td><td class="r num">${e.mk>=1?'+':''}${f((e.mk-1)*100,0)}%</td><td class="r num"><span class="chip ${anom==='only'?'warn':e.ex>=0.5?'bad':'warn'}">${anom==='only'?'단위·규격 확인':'+'+f(e.ex*100,0)+'%'}</span></td></tr>`});
+    h+=`<tr class="click${e.g==='C'?' gradeC':''}" tabindex="0" data-code="${esc(C[r[4]])}"><td class="num">${fmtD(r[0])}<br><span class="hint">직전 ${fmtD(pr[0])}</span></td><td class="wrap-cell">${esc(N[r[3]])}${koTag(r[3])}<br><span class="hint">${esc(P[r[5]])} · ${esc(C[r[4]])}</span></td><td>${esc(U[r[6]])}</td><td><span class="chip g${e.g}" title="${GT[e.g]}">${e.g}</span></td><td class="wrap-cell">${esc(V[pr[2]])} →<br>${esc(V[r[2]])}${e.vch?' <span class="chip none">업체 변경</span>':''}</td><td class="r num">${fUSD(e.pm)} →<br>${fUSD(puU[e.i])}</td><td class="r num">${e.ratio>=1?'+':''}${f((e.ratio-1)*100,0)}%</td><td class="r num">${e.mk>=1?'+':''}${f((e.mk-1)*100,1)}%<br><span class="hint">${esc(e.mkl)}</span></td><td class="r num"><span class="chip ${anom==='only'?'warn':'cand'}">${anom==='only'?'단위·규격 확인':(e.ex>=0?'+':'')+f(e.ex*100,0)+'%'}</span></td></tr>`});
   h+='</tbody></table></div>';if(list.length>tLimit)h+=`<div class="more"><button class="ghost" type="button" id="tmore">${(list.length-tLimit).toLocaleString()}건 더 보기</button></div>`;
   if(!list.length)h='<div class="empty">조건에 맞는 구매가 없습니다.</div>';
   const el=$('#tout');el.innerHTML=h;
@@ -760,11 +742,11 @@ function renderTrend(){
   const pairs=[...after.entries()].filter(([k])=>before.has(k)).map(([k,ai])=>{const bi=before.get(k);return {bi,ai,ch:(R[ai][9]/R[bi][9]-1)*100}});
   const fxp=(1520/1320-1)*100;
   $('#tfx').innerHTML=pairs.length?`<div class="stats" style="margin-bottom:10px"><div class="stat"><div class="k">비교 가능 품목</div><div class="v">${pairs.length}</div><div class="s">10/7 전·후 모두 IQD로 구매</div></div><div class="stat"><div class="k">IQD 단가 변동 (중앙)</div><div class="v">${f(med(pairs.map(x=>x.ch)),1)}%</div><div class="s">환율 변동분 +${f(fxp,1)}%</div></div></div>
-    <div class="tbl-wrap"><table><thead><tr><th>품목</th><th class="r">10/7 이전 (IQD)</th><th class="r">이후 (IQD)</th><th class="r">변동</th><th class="r">환율분 대비</th></tr></thead><tbody>${pairs.sort((a,b)=>b.ch-a.ch).map(x=>{const r=R[x.ai];return `<tr class="click" data-code="${esc(C[r[4]])}"><td class="wrap-cell">${esc(N[r[3]])}<br><span class="hint">${esc(P[r[5]])}</span></td><td class="r num">${fUSD(R[x.bi][9])}<br><span class="hint">${fmtD(R[x.bi][0])}</span></td><td class="r num">${fUSD(r[9])}<br><span class="hint">${fmtD(r[0])}</span></td><td class="r num">${x.ch>0?'+':''}${f(x.ch,0)}%</td><td class="r num">${x.ch-fxp>0?'+':''}${f(x.ch-fxp,0)}%p</td></tr>`}).join('')}</tbody></table></div>
+    <div class="tbl-wrap"><table><thead><tr><th>품목</th><th class="r">10/7 이전 (IQD)</th><th class="r">이후 (IQD)</th><th class="r">변동</th><th class="r">환율분 대비</th></tr></thead><tbody>${pairs.sort((a,b)=>b.ch-a.ch).map(x=>{const r=R[x.ai];const gg=gradeOf(x.ai);return `<tr class="click${gg==='C'?' gradeC':''}" data-code="${esc(C[r[4]])}"><td class="wrap-cell">${esc(N[r[3]])} <span class="chip g${gg}">${gg}</span><br><span class="hint">${esc(P[r[5]])}</span></td><td class="r num">${fUSD(R[x.bi][9])}<br><span class="hint">${fmtD(R[x.bi][0])}</span></td><td class="r num">${fUSD(r[9])}<br><span class="hint">${fmtD(r[0])}</span></td><td class="r num">${x.ch>0?'+':''}${f(x.ch,0)}%</td><td class="r num">${x.ch-fxp>0?'+':''}${f(x.ch-fxp,0)}%p</td></tr>`}).join('')}</tbody></table></div>
     <p class="hint" style="margin:8px 0 0">10/7 이후 데이터가 아직 적습니다. 구매내역이 갱신될수록 정확해집니다. "환율분 대비"가 +이면 환율 변동보다 더 올린 것입니다.</p>`:'<div class="empty">10/7 이후 IQD 재구매가 아직 없습니다.</div>';
   $('#tfx').querySelectorAll('tr[data-code]').forEach(tr=>{tr.onclick=()=>gotoCode(tr.dataset.code)});
 }
-['#tfrom','#tth','#tsg','#tanom'].forEach(s=>$(s).addEventListener('change',()=>{tLimit=200;renderTrend()}));
+['#tfrom','#tth','#tsg','#tanom','#tgr'].forEach(s=>$(s).addEventListener('change',()=>{tLimit=200;renderTrend()}));
 
 /* ---------- 지출 현황 ---------- */
 let spInit=false;
