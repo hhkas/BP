@@ -327,10 +327,18 @@ main th[data-sort="asc"]::after{content:" ▴"}
     <span class="hint" id="afiles">선택된 파일 없음</span>
   </label>
   <div class="bar">
-    <div class="field"><label for="apw">비밀번호</label><input type="password" id="apw" placeholder="비우면 지금 비밀번호 유지" autocomplete="new-password"></div>
-    <div class="field"><label for="apw2">비밀번호 확인</label><input type="password" id="apw2" autocomplete="new-password"></div>
+    <div class="field"><label for="apw">새 비밀번호 (바꿀 때만)</label><input type="password" id="apw" placeholder="비우면 지금 비밀번호 유지" autocomplete="new-password"></div>
+    <div class="field"><label for="apw2">새 비밀번호 확인</label><input type="password" id="apw2" autocomplete="new-password"></div>
     <button class="btn" type="button" id="abuild">data.enc 만들기</button>
   </div>
+  <div class="panel"><div class="ph"><h3>비밀번호만 변경</h3><span class="hint">자료는 그대로 두고 비밀번호만 바꾼 data.enc를 만듭니다</span></div><div class="pb">
+    <div class="bar" style="margin:0">
+      <div class="field"><label for="cpw">새 비밀번호 (12자 이상 권장)</label><input type="password" id="cpw" autocomplete="new-password"></div>
+      <div class="field"><label for="cpw2">새 비밀번호 확인</label><input type="password" id="cpw2" autocomplete="new-password"></div>
+      <button class="btn" type="button" id="cpwgo">비밀번호 변경 파일 만들기</button>
+    </div>
+    <p class="hint" style="margin:8px 0 0">내려받은 data.enc를 GitHub에 덮어쓰면 그때부터 새 비밀번호로만 열립니다. 새 비밀번호는 따로 기록해 두세요 (잊으면 복구 불가).</p>
+  </div></div>
   <div class="panel"><div class="pb" id="aout"><div class="empty">파일을 선택하면 결과가 여기에 표시됩니다.</div></div></div>
 </section>
 
