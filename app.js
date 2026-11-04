@@ -1,4 +1,7 @@
 function start(D,KO,PASS){
+// SAB 현장(SAB Airfield 등)은 프로젝트 위치가 달라 운송비·마진이 달라서 비교 의미가 없으므로 전부 제외
+const isSABname=s=>/SAB/i.test(s||'');const sabOut=D.R.filter(r=>isSABname(D.S[r[1]])).length;
+D={...D,R:D.R.filter(r=>!isSABname(D.S[r[1]]))};
 KO=KO||{w:{},p:{}};
 const R=D.R, S=D.S, V=D.V, N=D.N, C=D.C, P=D.P, U=D.U;
 const usd0=Float64Array.from(R,r=>r[10]); // 원본 USD 금액 (setBase가 R[i][10]을 덮어쓰므로 갱신용으로 보관)
@@ -81,7 +84,7 @@ function chart(idx,refMed){
   EVENTS.forEach(([d,lb])=>{if(d<minY*10000||d>maxY*10000+1231)return;const xx=X(d);fxl+=`<line class="evl" x1="${xx}" x2="${xx}" y1="${T}" y2="${H-B}"><title>${fmtD(d)} ${lb}</title></line><text class="evt" x="${xx-2}" y="${H-B-4}" text-anchor="end">${lb}</text>`});
   let pts=''; idx.forEach(i=>{if(pu[i]<=0)return;const r=R[i];pts+=`<circle class="pt${isSAB[r[1]]?' sab':''}${isConv(i)?' cv':''}" cx="${X(r[0]).toFixed(1)}" cy="${Y(pu[i]).toFixed(1)}" r="3.6"><title>${fmtD(r[0])} · ${esc(V[r[2]])} · ${fUSD(pu[i])} ${CUR}${isConv(i)?' (환산)':''}</title></circle>`});
   return `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="단가 추이">${g}<line class="axis" x1="${L}" x2="${W-Rp}" y1="${H-B}" y2="${H-B}"/>${fxl}${m}${pts}</svg>
-  <div class="legend"><span><i style="background:var(--accent)"></i>SAB 외 현장</span><span><i style="background:var(--sab)"></i>SAB Airfield</span><span><i style="background:transparent;border:1.5px solid var(--accent)"></i>빈 점: ${CUR==='IQD'?'USD':'IQD'} 발주를 당시 환율로 환산</span><span>세로선: 환율 변경 · 주요 사건</span><span>단위: ${CUR} / 발주단위</span></div>`;
+  <div class="legend"><span><i style="background:var(--accent)"></i>발주 단가</span><span><i style="background:transparent;border:1.5px solid var(--accent)"></i>빈 점: ${CUR==='IQD'?'USD':'IQD'} 발주를 당시 환율로 환산</span><span>세로선: 환율 변경 · 주요 사건</span><span>단위: ${CUR} / 발주단위</span></div>`;
 }
 function niceStep(x){const p=Math.pow(10,Math.floor(Math.log10(x||1)));const n=x/p;return (n<=1?1:n<=2?2:n<=5?5:10)*p}
 
@@ -660,7 +663,7 @@ af.addEventListener('change',()=>setAFiles(af.files));
 ad.addEventListener('drop',ev=>setAFiles(ev.dataTransfer.files));
 async function buildData(files,mode='merge'){
   await loadScript('lib/xlsx.full.min.js');
-  const recs=[],skipped=[];
+  const recs=[],skipped=[];let sabSkip=0;
   for(const file of files){
     const wb=XLSX.read(await file.arrayBuffer(),{cellDates:true});let got=0;
     for(const sn of wb.SheetNames){const rows=XLSX.utils.sheet_to_json(wb.Sheets[sn],{header:1,raw:true,defval:null});
@@ -671,6 +674,7 @@ async function buildData(files,mode='merge'){
       for(const r of rows.slice(hi+1)){if(!r||r[0]==null||!isFinite(parseFloat(r[0])))continue; // 소계 행 제외
         let d=r[col('발주일자')];if(!(d instanceof Date)){d=new Date(String(d));}if(isNaN(d))continue;
         const s=k=>{const v=r[col(k)];return v==null?'':String(v).trim()},n=k=>{const v=parseFloat(String(r[col(k)]??'').replace(/,/g,''));return isFinite(v)?v:0};
+        if(isSABname(s('현장명'))){sabSkip++;continue}
         recs.push({d:d.getFullYear()*10000+(d.getMonth()+1)*100+d.getDate(),site:s('현장명'),ven:s('거래처명'),name:s('품명'),code:s('자재 코드'),spec:s('규격'),unit:s('단위').toUpperCase(),
           cur:s('통화')==='IQD'?1:0,q:n('발주수량'),p:n('발주단가'),usd:n('발주금액(USD)'),rc:n('입고수량'),pr:s('PR번호').replace(/\.0$/,'')});got++}}
     if(!got)skipped.push(file.name);
@@ -684,7 +688,7 @@ async function buildData(files,mode='merge'){
   const [S_,sm]=dict('site'),[V_,vm]=dict('ven'),[N_,nm]=dict('name'),[C_,cm]=dict('code'),[P_,pm]=dict('spec'),[U_,um]=dict('unit');
   const r4=(x,k)=>Math.round(x*10**k)/10**k;
   const out={S:S_,V:V_,N:N_,C:C_,P:P_,U:U_,R:recs.map(x=>[x.d,sm.get(x.site),vm.get(x.ven),nm.get(x.name),cm.get(x.code),pm.get(x.spec),um.get(x.unit),x.cur,r4(x.q,3),r4(x.p,4),r4(x.usd,2),r4(x.rc,3),x.pr]),gen:new Date().toISOString().slice(0,10)};
-  return {out,skipped,newYears,kept};
+  return {out,skipped,newYears,kept,sabSkip};
 }
 async function encryptData(obj,pass){
   const enc=new TextEncoder(),salt=crypto.getRandomValues(new Uint8Array(16)),iv=crypto.getRandomValues(new Uint8Array(12)),iter=250000;
@@ -706,12 +710,12 @@ $('#abuild').onclick=async()=>{
   if(p1&&p1.length<8){o.innerHTML='<div class="empty" style="color:var(--bad)">비밀번호는 8자 이상으로 정하세요 (12자 이상 권장).</div>';return}
   const pass=p1||PASS;$('#abuild').disabled=true;o.innerHTML='<div class="empty">엑셀을 읽고 암호화하는 중…</div>';
   try{const pwOnly=forcePw||!aFiles.length;forcePw=false;const mode=pwOnly?'merge':(document.querySelector('input[name=amode]:checked')||{}).value||'merge';
-    const {out,skipped,newYears,kept}=pwOnly?{out:{...D,R:R.map((r,i)=>{const x=r.slice();x[10]=usd0[i];return x})},skipped:[],newYears:['(없음 — 비밀번호만 변경)'],kept:R.length}:await buildData(aFiles,mode);if(!out.R.length)throw new Error('구매내역 행을 찾지 못했습니다. 회사 시스템의 "구매내역(자재 기준)" 엑셀인지 확인하세요.');
+    const {out,skipped,newYears,kept,sabSkip=0}=pwOnly?{out:{...D,R:R.map((r,i)=>{const x=r.slice();x[10]=usd0[i];return x})},skipped:[],newYears:['(없음 — 비밀번호만 변경)'],kept:R.length}:await buildData(aFiles,mode);if(!out.R.length)throw new Error('구매내역 행을 찾지 못했습니다. 회사 시스템의 "구매내역(자재 기준)" 엑셀인지 확인하세요.');
     const blob=new Blob([await encryptData(out,pass)],{type:'application/octet-stream'});const url=URL.createObjectURL(blob);
     const a=document.createElement('a');a.href=url;a.download='data.enc';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),5000);
     const d0=out.R[0][0],d1=out.R[out.R.length-1][0];const newer=out.R.filter(r=>r[0]>lastDate).length;
     o.innerHTML=`<div class="stats"><div class="stat"><div class="k">구매내역</div><div class="v">${out.R.length.toLocaleString()}건</div><div class="s">현재 ${R.length.toLocaleString()}건</div></div><div class="stat"><div class="k">기간</div><div class="v" style="font-size:14px">${fmtD(d0)} ~ ${fmtD(d1)}</div><div class="s">현재 기준일 ${fmtD(lastDate)}</div></div><div class="stat"><div class="k">새로 들어온 건</div><div class="v">${newer.toLocaleString()}</div><div class="s">현재 기준일 이후</div></div><div class="stat"><div class="k">${mode==='merge'?'교체한 연도':'방식'}</div><div class="v" style="font-size:14px">${mode==='merge'?esc(newYears.join(', ')):'전체 새로 만들기'}</div><div class="s">${mode==='merge'?`그 외 ${kept.toLocaleString()}건 유지`:'올린 파일만 사용'}</div></div><div class="stat"><div class="k">비밀번호</div><div class="v" style="font-size:14px">${p1?'새 비밀번호':'지금과 동일'}</div></div></div>
-      <p style="margin:10px 0 0"><b>data.enc</b> 파일이 저장되었습니다. GitHub 저장소에 올려 덮어쓰세요.${out.R.length<R.length?` <span class="chip warn">${mode==='merge'?'교체한 연도의 건수가 지금보다 적습니다. 그 연도 파일이 전체 기간 자료인지 확인하세요.':'현재보다 건수가 적습니다. 빠진 연도 파일이 없는지 확인하세요.'}</span>`:''}${skipped.length?` <span class="chip none">구매 행이 없는 파일: ${esc(skipped.join(', '))}</span>`:''}</p>`;
+      <p style="margin:10px 0 0"><b>data.enc</b> 파일이 저장되었습니다. GitHub 저장소에 올려 덮어쓰세요.${sabSkip?` <span class="chip none">SAB 현장 ${sabSkip.toLocaleString()}건 제외</span>`:''}${out.R.length<R.length?` <span class="chip warn">${mode==='merge'?'교체한 연도의 건수가 지금보다 적습니다. 그 연도 파일이 전체 기간 자료인지 확인하세요.':'현재보다 건수가 적습니다. 빠진 연도 파일이 없는지 확인하세요.'}</span>`:''}${skipped.length?` <span class="chip none">구매 행이 없는 파일: ${esc(skipped.join(', '))}</span>`:''}</p>`;
   }catch(e){o.innerHTML=`<div class="empty" style="color:var(--bad)">${esc(e.message||String(e))}</div>`}
   $('#abuild').disabled=false;
 };
