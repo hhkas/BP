@@ -696,12 +696,12 @@ async function encryptData(obj,pass){
 }
 $('#abuild').onclick=async()=>{
   const o=$('#aout');const p1=$('#apw').value,p2=$('#apw2').value;
-  if(!aFiles.length){o.innerHTML='<div class="empty">구매내역 엑셀 파일을 먼저 선택하세요.</div>';return}
+  if(!aFiles.length&&!p1){o.innerHTML='<div class="empty">구매내역 엑셀 파일을 선택하거나, 비밀번호만 바꾸려면 새 비밀번호를 입력하세요.</div>';return}
   if(p1&&p1!==p2){o.innerHTML='<div class="empty" style="color:var(--bad)">비밀번호 확인이 일치하지 않습니다.</div>';return}
   if(p1&&p1.length<8){o.innerHTML='<div class="empty" style="color:var(--bad)">비밀번호는 8자 이상으로 정하세요 (12자 이상 권장).</div>';return}
   const pass=p1||PASS;$('#abuild').disabled=true;o.innerHTML='<div class="empty">엑셀을 읽고 암호화하는 중…</div>';
-  try{const mode=(document.querySelector('input[name=amode]:checked')||{}).value||'merge';
-    const {out,skipped,newYears,kept}=await buildData(aFiles,mode);if(!out.R.length)throw new Error('구매내역 행을 찾지 못했습니다. 회사 시스템의 "구매내역(자재 기준)" 엑셀인지 확인하세요.');
+  try{const pwOnly=!aFiles.length;const mode=pwOnly?'merge':(document.querySelector('input[name=amode]:checked')||{}).value||'merge';
+    const {out,skipped,newYears,kept}=pwOnly?{out:{...D,R:R.map((r,i)=>{const x=r.slice();x[10]=usd0[i];return x})},skipped:[],newYears:['(없음 — 비밀번호만 변경)'],kept:R.length}:await buildData(aFiles,mode);if(!out.R.length)throw new Error('구매내역 행을 찾지 못했습니다. 회사 시스템의 "구매내역(자재 기준)" 엑셀인지 확인하세요.');
     const blob=new Blob([await encryptData(out,pass)],{type:'application/octet-stream'});const url=URL.createObjectURL(blob);
     const a=document.createElement('a');a.href=url;a.download='data.enc';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),5000);
     const d0=out.R[0][0],d1=out.R[out.R.length-1][0];const newer=out.R.filter(r=>r[0]>lastDate).length;
