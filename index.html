@@ -368,7 +368,9 @@ main th[data-sort="asc"]::after{content:" ▴"}
     <button class="ghost" type="button" id="sreset">조건 초기화</button>
   </div>
   <div class="stats" id="sstats"></div>
-  <div class="panel"><div class="ph"><h3>연도별 발주액 (USD)</h3><span class="hint">2023년 데이터 없음</span></div><div class="pb" id="syears"></div></div>
+  <div class="panel"><div class="ph"><h3>연도별 발주액</h3><span class="hint">2023년 데이터 없음 · 막대를 누르면 그 연도의 월별 발주액</span></div><div class="pb" id="syears"></div></div>
+  <div class="panel"><div class="ph"><h3 id="smtitle">월별 발주액</h3><span class="row" style="gap:6px"><select id="smy" aria-label="월별 보기 연도"></select><span class="hint">막대를 누르면 그 달의 지출 내역</span></span></div><div class="pb" id="smonths"></div></div>
+  <div class="panel"><div class="ph"><h3 id="sltitle">지출 내역</h3><span class="row" style="gap:6px"><span class="hint" id="slcount"></span><button class="ghost" type="button" id="slall">연도 전체 보기</button><button class="btn" type="button" id="slexport">엑셀로 저장</button></span></div><div class="pb" id="slines"></div></div>
   <div class="grid2">
     <div class="panel"><div class="ph"><h3>현장·부서별</h3><span class="hint" id="ssitec"></span></div><div class="pb" id="ssites"></div></div>
     <div class="panel"><div class="ph"><h3>품목군별</h3><span class="hint" id="scatc"></span></div><div class="pb" id="scats"></div></div>

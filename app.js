@@ -785,7 +785,11 @@ function initSpend(){
   const st=$('#ssite');st.add(new Option('전체','-1'));const tot=new Map();R.forEach(r=>tot.set(r[1],(tot.get(r[1])||0)+r[10]));
   [...tot.entries()].sort((x,y)=>y[1]-x[1]).forEach(([s])=>st.add(new Option(S[s]||'(현장명 없음)',s)));
   const sc=$('#scat');sc.add(new Option('전체',''));[...new Set(rowCat)].sort().forEach(c=>sc.add(new Option(c,c)));
-  ['#sy1','#sy2','#ssite','#scat'].forEach(s=>$(s).addEventListener('change',renderSpend));
+  ['#sy1','#sy2','#ssite','#scat'].forEach(s=>$(s).addEventListener('change',()=>{smMonth=0;smLimit=300;renderSpend()}));
+  const my=$('#smy');for(let y=maxY;y>=minY;y--)my.add(new Option(y+'년',y));my.value=maxY;
+  my.addEventListener('change',()=>{smMonth=0;renderSpend()});
+  $('#slall').onclick=()=>{smMonth=0;renderSpend()};
+  $('#slexport').onclick=exportSpendLines;
   $('#sreset').onclick=()=>{a.value=minY;b.value=maxY;st.value='-1';sc.value='';renderSpend()};
   renderSpend();
 }
@@ -799,7 +803,7 @@ function renderSpend(){
     const k=r[4]+'|'+r[6];const it=items.get(k)||{i0:i,usd:0,q:0,n:0};it.usd+=u;it.q+=r[8];it.n++;items.set(k,it)}
   $('#sstats').innerHTML=`<div class="stat"><div class="k">발주액 (${CUR})</div><div class="v">${fUSD(tot)}</div><div class="s">${a}–${b}</div></div><div class="stat"><div class="k">발주 라인</div><div class="v">${n.toLocaleString()}</div></div><div class="stat"><div class="k">현장·부서</div><div class="v">${sites.size}</div></div><div class="stat"><div class="k">거래처</div><div class="v">${vend.size}</div></div>`;
   const mx=Math.max(...Object.values(years),1);let yb='<div class="vbars">';
-  for(let y=a;y<=b;y++){const v=years[y]||0;const lbl=v>=1e6?f(v/1e6,1)+'M':v>=1e3?f(v/1e3,0)+'K':v?f(v,0):'–';yb+=`<div title="${y}: ${fUSD(v)} ${CUR}"><span class="v">${lbl}</span><span class="b" style="height:${v?Math.max(2,v/mx*110):0}px"></span><span class="l">${y}</span></div>`}
+  for(let y=a;y<=b;y++){const v=years[y]||0;const lbl=v>=1e6?f(v/1e6,1)+'M':v>=1e3?f(v/1e3,0)+'K':v?f(v,0):'–';yb+=`<div data-y="${y}" title="${y}: ${fUSD(v)} ${CUR}"><span class="v">${lbl}</span><span class="b" style="height:${v?Math.max(2,v/mx*110):0}px"></span><span class="l">${y}</span></div>`}
   $('#syears').innerHTML=yb+'</div>';
   const sl=[...sites.entries()].sort((x,y)=>y[1].usd-x[1].usd);
   $('#ssitec').textContent=`${sl.length}곳`;
@@ -809,10 +813,53 @@ function renderSpend(){
   $('#scats').innerHTML=`<div class="tbl-wrap" style="max-height:420px;overflow:auto"><table><thead><tr><th>품목군</th><th class="r">발주액</th><th>비중</th><th class="r">라인</th><th class="r">품목</th></tr></thead><tbody>${cl.map(([c,x])=>{const sh=x.usd/tot*100;return `<tr class="click" tabindex="0" data-cat="${esc(c)}"><td>${esc(c)}</td><td class="r num">${fUSD(x.usd)}</td><td class="num"><span class="share" style="width:${Math.max(1,sh*0.8)}px"></span>${f(sh,1)}%</td><td class="r num">${x.n.toLocaleString()}</td><td class="r num">${x.codes.size}</td></tr>`}).join('')}</tbody></table></div>`;
   const il=[...items.values()].sort((x,y)=>y.usd-x.usd).slice(0,25);
   $('#sitems').innerHTML=`<div class="tbl-wrap"><table><thead><tr><th>자재코드</th><th>품명 / 규격</th><th>단위</th><th class="r">수량</th><th class="r">라인</th><th class="r">발주액 (${CUR})</th><th>비중</th></tr></thead><tbody>${il.map(x=>{const r=R[x.i0];const sh=x.usd/tot*100;return `<tr class="click" tabindex="0" data-code="${esc(C[r[4]])}"><td class="mono">${esc(C[r[4]])}</td><td class="wrap-cell">${esc(N[r[3]])}${koTag(r[3])}<br><span class="hint">${esc(P[r[5]])}</span></td><td>${esc(U[r[6]])}</td><td class="r num">${f(x.q)}</td><td class="r num">${x.n}</td><td class="r num">${fUSD(x.usd)}</td><td class="num">${f(sh,1)}%</td></tr>`}).join('')}</tbody></table></div>`;
+  renderSpendMonths(site,cat);
+  document.querySelectorAll('#syears .vbars>div[data-y]').forEach(d=>{d.style.cursor='pointer';d.onclick=()=>{$('#smy').value=d.dataset.y;smMonth=0;renderSpend()}});
   const bind=(sel,fn)=>document.querySelectorAll(sel).forEach(tr=>{tr.onclick=()=>fn(tr);tr.onkeydown=ev=>{if(ev.key==='Enter')fn(tr)}});
   bind('#ssites tr[data-site]',tr=>{$('#ssite').value=tr.dataset.site;renderSpend()});
   bind('#scats tr[data-cat]',tr=>{$('#scat').value=tr.dataset.cat;renderSpend()});
   bind('#sitems tr[data-code]',tr=>gotoCode(tr.dataset.code));
+}
+
+let smMonth=0,smLines=[];
+function renderSpendMonths(site,cat){
+  const Y=+$('#smy').value;const mon=new Array(13).fill(0),cnt=new Array(13).fill(0);smLines=[];
+  for(let i=0;i<R.length;i++){const r=R[i];if(yr(i)!==Y)continue;if(site>=0&&r[1]!==site)continue;if(cat&&rowCat[i]!==cat)continue;
+    const m=Math.floor(r[0]/100)%100;mon[m]+=r[10];cnt[m]++;if(!smMonth||m===smMonth)smLines.push(i)}
+  const mx=Math.max(...mon.slice(1),1),tot=mon.reduce((s,v)=>s+v,0);let h='<div class="vbars">';
+  for(let m=1;m<=12;m++){const v=mon[m];const lbl=v>=1e6?f(v/1e6,1)+'M':v>=1e3?f(v/1e3,0)+'K':v?f(v,0):'–';
+    h+=`<div data-m="${m}" style="cursor:${v?'pointer':'default'}" title="${Y}-${String(m).padStart(2,'0')}: ${fUSD(v)} ${CUR} · ${cnt[m]}건"><span class="v">${lbl}</span><span class="b" style="height:${v?Math.max(2,v/mx*110):0}px;${smMonth===m?'background:var(--warn,#e8590c)':''}"></span><span class="l">${m}월</span></div>`}
+  $('#smonths').innerHTML=h+'</div>'+`<p class="hint" style="margin:8px 0 0">${Y}년 합계 ${fUSD(tot)} ${CUR} · 월평균 ${fUSD(tot/Math.max(1,mon.slice(1).filter(Boolean).length))} ${CUR} (발주 있는 달 기준)</p>`;
+  $('#smtitle').textContent=`월별 발주액 (${CUR})`;
+  document.querySelectorAll('#smonths .vbars>div[data-m]').forEach(d=>d.onclick=()=>{const m=+d.dataset.m;if(!cnt[m])return;smMonth=smMonth===m?0:m;renderSpendMonths(site,cat)});
+  renderSpendLines(Y);
+}
+function renderSpendLines(Y){
+  const L=smLines.slice().sort((a,b)=>R[b][0]-R[a][0]||R[b][10]-R[a][10]);const tot=L.reduce((s,i)=>s+R[i][10],0);
+  $('#sltitle').textContent=`지출 내역 — ${Y}년${smMonth?' '+smMonth+'월':' 전체'}`;
+  $('#slcount').textContent=`${L.length.toLocaleString()}건 · ${fUSD(tot)} ${CUR}`;
+  $('#slall').hidden=!smMonth;
+  const show=L.slice(0,smLimit);
+  let h=`<div class="tbl-wrap" style="max-height:560px;overflow:auto"><table><thead><tr><th>발주일</th><th>현장·부서</th><th>거래처</th><th>자재코드</th><th>품명 / 규격</th><th class="r">수량</th><th>단위</th><th class="r">단가 (${CUR})</th><th class="r">금액 (${CUR})</th><th>PR번호</th></tr></thead><tbody>`;
+  show.forEach(i=>{const r=R[i];h+=`<tr class="click" tabindex="0" data-code="${esc(C[r[4]])}"><td class="num">${fmtD(r[0])}</td><td>${esc(S[r[1]]||'')}</td><td>${esc(V[r[2]]||'')}</td><td class="mono">${esc(C[r[4]])}</td><td class="wrap-cell">${esc(N[r[3]])}${koTag(r[3])}<br><span class="hint">${esc(P[r[5]])}</span></td><td class="r num">${f(r[8])}</td><td>${esc(U[r[6]])}</td><td class="r num">${fUSD(pu[i])}</td><td class="r num">${fUSD(r[10])}</td><td class="mono hint">${esc(String(r[12]||''))}</td></tr>`});
+  h+='</tbody></table></div>';
+  if(L.length>smLimit)h+=`<div class="more"><button class="ghost" type="button" id="slmore">${(L.length-smLimit).toLocaleString()}건 더 보기</button></div>`;
+  if(!L.length)h='<div class="empty">해당 기간의 지출 내역이 없습니다.</div>';
+  const el=$('#slines');el.innerHTML=h;
+  el.querySelectorAll('tr[data-code]').forEach(tr=>{tr.onclick=()=>gotoCode(tr.dataset.code);tr.onkeydown=ev=>{if(ev.key==='Enter')gotoCode(tr.dataset.code)}});
+  const mb=el.querySelector('#slmore');if(mb)mb.onclick=()=>{smLimit+=500;renderSpendLines(Y)};
+}
+let smLimit=300;
+async function exportSpendLines(){
+  if(!smLines.length)return;await loadScript('lib/xlsx.full.min.js');
+  const Y=+$('#smy').value;const L=smLines.slice().sort((a,b)=>R[a][0]-R[b][0]);
+  const site=+$('#ssite').value,cat=$('#scat').value;
+  const aoa=[[`지출 내역 · ${Y}년${smMonth?' '+smMonth+'월':''} · BP Bismaya Purchase`],[`기준 통화 ${CUR} · 현장·부서 ${site>=0?S[site]:'전체'} · 품목군 ${cat||'전체'} · 구매이력 기준일 ${fmtD(lastDate)}`],[],
+    ['발주일','현장·부서','거래처','자재코드','품명','규격','수량','단위',`단가(${CUR})`,`금액(${CUR})`,'발주 통화','PR번호']];
+  L.forEach(i=>{const r=R[i];aoa.push([fmtD(r[0]),S[r[1]]||'',V[r[2]]||'',C[r[4]],N[r[3]],P[r[5]],r[8],U[r[6]],Math.round(pu[i]*100)/100,Math.round(r[10]*100)/100,r[7]?'IQD':'USD',String(r[12]||'')])});
+  aoa.push([]);aoa.push(['합계','','','','','','','','',Math.round(L.reduce((s,i)=>s+R[i][10],0)*100)/100]);
+  const ws=XLSX.utils.aoa_to_sheet(aoa);ws['!cols']=[{wch:11},{wch:18},{wch:28},{wch:13},{wch:30},{wch:24},{wch:9},{wch:7},{wch:12},{wch:14},{wch:8},{wch:16}];
+  const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'지출 내역');XLSX.writeFile(wb,`BP_지출내역_${Y}${smMonth?'-'+String(smMonth).padStart(2,'0'):''}.xlsx`);
 }
 
 updMeta();renderChips();runSearch();runQuote();route();
