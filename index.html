@@ -286,7 +286,7 @@ main th[data-sort="asc"]::after{content:" ▴"}
 <section class="view" id="v-recurring" hidden>
   <div>
     <h2>반복 구매 · 소요 예측</h2>
-    <p class="lede">여러 해에 걸쳐 반복해서 산 품목입니다. 최근 12개월 수량과 최근 단가로 연간 예상 금액을 계산하니, 연간 단가계약이나 일괄구매 후보를 고를 때 쓰세요. 2023년은 데이터가 없어서 연속 구매 판단에서 빠집니다.</p>
+    <p class="lede">여러 해에 걸쳐 반복해서 산 품목입니다. 최근 12개월 수량과 최근 단가로 연간 예상 금액을 계산하니, 연간 단가계약이나 일괄구매 후보를 고를 때 쓰세요.</p>
   </div>
   <div class="bar">
     <div class="field grow"><label for="rq">품명·규격·코드 필터</label><input type="text" id="rq" autocomplete="off" placeholder="비우면 전체"></div>
@@ -377,7 +377,7 @@ main th[data-sort="asc"]::after{content:" ▴"}
     <button class="ghost" type="button" id="sreset">조건 초기화</button>
   </div>
   <div class="stats" id="sstats"></div>
-  <div class="panel"><div class="ph"><h3>연도별 발주액</h3><span class="hint">2023년 데이터 없음 · 막대를 누르면 그 연도의 월별 발주액</span></div><div class="pb" id="syears"></div></div>
+  <div class="panel"><div class="ph"><h3>연도별 발주액</h3><span class="hint"><span id="sygap"></span>막대를 누르면 그 연도의 월별 발주액</span></div><div class="pb" id="syears"></div></div>
   <div class="panel"><div class="ph"><h3 id="smtitle">월별 발주액</h3><span class="row" style="gap:6px"><select id="smy" aria-label="월별 보기 연도"></select><span class="hint">막대를 누르면 그 달의 지출 내역</span></span></div><div class="pb" id="smonths"></div></div>
   <div class="panel"><div class="ph"><h3 id="sltitle">지출 내역</h3><span class="row" style="gap:6px"><span class="hint" id="slcount"></span><button class="ghost" type="button" id="slall">연도 전체 보기</button><button class="btn" type="button" id="slexport">엑셀로 저장</button></span></div><div class="pb" id="slines"></div></div>
   <div class="grid2">

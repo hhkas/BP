@@ -810,6 +810,7 @@ function renderSpend(){
   const mx=Math.max(...Object.values(years),1);let yb='<div class="vbars">';
   for(let y=a;y<=b;y++){const v=years[y]||0;const lbl=v>=1e6?f(v/1e6,1)+'M':v>=1e3?f(v/1e3,0)+'K':v?f(v,0):'–';yb+=`<div data-y="${y}" title="${y}: ${fUSD(v)} ${CUR}"><span class="v">${lbl}</span><span class="b" style="height:${v?Math.max(2,v/mx*110):0}px"></span><span class="l">${y}</span></div>`}
   $('#syears').innerHTML=yb+'</div>';
+  {const miss=[];for(let y=a;y<=b;y++)if(!years[y])miss.push(y);$('#sygap').textContent=miss.length?miss.join('·')+'년 데이터 없음 · ':''}
   const sl=[...sites.entries()].sort((x,y)=>y[1].usd-x[1].usd);
   $('#ssitec').textContent=`${sl.length}곳`;
   $('#ssites').innerHTML=`<div class="tbl-wrap" style="max-height:420px;overflow:auto"><table><thead><tr><th>현장·부서</th><th class="r">발주액</th><th>비중</th><th class="r">라인</th><th>기간</th></tr></thead><tbody>${sl.map(([s,x])=>{const ys=[...x.yrs].sort();const sh=x.usd/tot*100;return `<tr class="click" tabindex="0" data-site="${s}"><td>${esc(S[s]||'(없음)')}${isSAB[s]?' <span class="chip sab">SAB</span>':''}</td><td class="r num">${fUSD(x.usd)}</td><td class="num"><span class="share" style="width:${Math.max(1,sh*0.8)}px"></span>${f(sh,1)}%</td><td class="r num">${x.n.toLocaleString()}</td><td class="num">${ys[0]}–${String(ys[ys.length-1]).slice(2)}</td></tr>`}).join('')}</tbody></table></div>`;
