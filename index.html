@@ -275,6 +275,7 @@ main th[data-sort="asc"]::after{content:" ▴"}
   <div class="bar">
     <div class="field"><label for="qsg">현장</label><select id="qsg"><option value="bncp">SAB 제외</option><option value="all">전체</option><option value="sab">SAB만</option></select></div>
     <div class="field"><label for="qcmp">최근 구매 이력 범위</label><select id="qcmp"><option value="all" selected>전체 (다른 통화는 당시 환율로 환산)</option><option value="IQD">IQD 발주만</option><option value="USD">USD 발주만</option></select></div>
+    <div class="field"><label for="qbefore">비교 기준일 (이 날짜 이전 구매만)</label><input type="date" id="qbefore" title="비우면 전체 기간. 견적서 날짜가 있으면 자동 입력"></div>
     <div class="field"><label for="qfx">견적 환산 환율 (1 USD)</label><input type="number" id="qfx" value="1520" style="width:100px"></div>
     <button class="btn" id="qrun" type="button">비교표 다시 만들기</button>
   </div>

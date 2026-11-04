@@ -289,7 +289,7 @@ let qItems=[];
 const UNIT_MAP={pcs:'EA',pc:'EA',piece:'EA',pieces:'EA',ea:'EA',each:'EA',nos:'EA',no:'EA',set:'SET',sets:'SET',roll:'ROLL',rolls:'ROLL',box:'BOX',boxes:'BOX',kg:'KG',m:'M',mtr:'M',meter:'M',l:'L',ltr:'L',liter:'L',litre:'L',ton:'TON',tons:'TON',bag:'BAG',bags:'BAG',drum:'DRUM',can:'CAN',pack:'PACK',pkt:'PACK',btl:'BTL',bottle:'BTL',m3:'M3',lot:'LOT',pair:'PAIR',prs:'PAIR'};
 function mkItem(o){
   const it={use:true,item:'',price:NaN,cur:'IQD',unit:'',qty:'',vendor:'',src:'',code:null,cands:[],...o};
-  const m=it.item.match(/\b([0-9]{10}|[A-Z]{3}[A-Z0-9]{3}\d{4})\b/);
+  const m=((o.codeHint||'')+' '+it.item).match(/\b([0-9]{10}|[A-Z]{3}[A-Z0-9]{3}\d{4})\b/);delete it.codeHint;
   const ci=m?codeIdx.get(m[1].toLowerCase()):codeIdx.get(it.item.trim().toLowerCase());
   if(ci!=null){it.cands=[{c:ci,s:1}];it.code=ci;if(/^\s*[A-Za-z0-9]{10}\s*$/.test(it.item)){const r=lastRowOf(ci);if(r)it.item=`${N[r[3]]} ${P[r[5]]}`.trim()}}else{it.cands=suggest(it.item);it.code=it.cands.length?it.cands[0].c:-1}
   return it;
@@ -351,21 +351,41 @@ function parseQuoteLines(lines,fname){
   return out.filter(x=>!(withQty>=2&&x.qty===''))
     .map(x=>{const cur=x.lc||dcur;const it=mkItem({item:x.item,price:x.price,cur,unit:x.unit,qty:x.qty,src:x.src});if(cur==='IQD'&&x.price<100)it.warn='IQD 단가가 너무 작습니다. 천 단위 구분이 잘못 읽혔는지 확인하세요.';return it});
 }
-// 엑셀 시트 → 품목
+// 엑셀 시트 → 품목 (업체별 견적서 1개 시트 / 여러 업체를 나란히 둔 가격비교표 모두 지원)
 function parseSheet(rows,fname){
-  rows=rows.map(r=>r.map(c=>c==null?'':normDigits(String(c)).trim()));
+  rows=rows.map(r=>Array.from(r||[],c=>c==null?'':normDigits(String(c)).trim()));
+  const isD=c=>c.length<=40&&/(desc|item|material|name|product|البيان|المادة|الوصف|المواد|품명)/.test(c)&&!/(no\.?$|code|코드)/.test(c);
+  const isP=c=>c.length<=40&&/(unit\s*price|u\.?\s*price|price|rate|سعر|السعر|단가)/.test(c)&&!/total|amount|اجمالي|الإجمالي|lowest|min|max|spread|금액/.test(c);
   let hi=-1,col={};
   for(let i=0;i<Math.min(rows.length,30);i++){const r=rows[i].map(c=>c.toLowerCase());
-    const d=r.findIndex(c=>/(desc|item|material|name|product|البيان|المادة|الوصف|المواد)/.test(c)&&!/(no\.?$|code)/.test(c));
-    const p=r.findIndex(c=>/(unit\s*price|u\.?\s*price|price|rate|سعر|السعر)/.test(c)&&!/total|amount|اجمالي|الإجمالي/.test(c));
-    if(d>=0&&p>=0){hi=i;col={d,p,q:r.findIndex(c=>/(qty|quantity|الكمية|العدد)/.test(c)),u:r.findIndex(c=>/(^unit$|uom|الوحدة)/.test(c)),c:r.findIndex(c=>/(currency|cur|العملة)/.test(c))};break}}
+    const d=r.findIndex(isD);if(d<0)continue;
+    const sub=(rows[i+1]||[]).map(c=>c.toLowerCase());
+    const pcs=r.map((c,k)=>isP(c)?k:-1).filter(k=>k>=0),scs=sub.map((c,k)=>isP(c)?k:-1).filter(k=>k>=0);
+    const head=k=>r[k]||'';
+    col={d,s:r.findIndex(c=>/(spec|규격|المواصفات)/.test(c)),q:r.findIndex(c=>/(qty|quantity|الكمية|العدد|수량)/.test(c)),u:r.findIndex(c=>/(^unit$|uom|الوحدة|단위)/.test(c)),c:r.findIndex(c=>/(currency|^cur|العملة|통화)/.test(c)),
+      k:r.findIndex(c=>/(item\s*code|material\s*code|^code$|자재\s*코드|코드)/.test(c))};
+    if(scs.length>=2){ // 가격비교표: 아래 행에 업체별 Unit Price 열이 반복됨
+      col.v=scs.map(k=>({k,vendor:rows[i][k]||''})).filter(x=>x.vendor&&!/lowest|min|max|best|최저/i.test(x.vendor));
+      hi=i+1;break}
+    if(pcs.length){col.p=pcs[0];hi=i;break}
+  }
   if(hi<0)return parseQuoteLines(rows.map(r=>r.filter(Boolean).join('  ')),fname);
-  const dc=docCurrency(rows.slice(0,hi+1).flat().join(' ')+' '+rows.slice(hi).map(r=>r[col.p]).join(' '));
-  const out=[];
-  rows.slice(hi+1).forEach(r=>{const item=r[col.d];const price=parseFloat((r[col.p]||'').replace(/[^0-9.\-]/g,''));if(!item||!isFinite(price)||price<=0||SKIP.test(item))return;
-    const cs=col.c>=0?r[col.c].toUpperCase():'';const cur=/IQD|دينار/.test(cs+r[col.p])?'IQD':/USD|\$/.test(cs+r[col.p])?'USD':(dc||(price>=250?'IQD':'USD'));
+  const dc=docCurrency(rows.slice(0,hi+1).flat().join(' '));
+  if(!$('#qbefore').value){for(const r of rows.slice(0,hi)){const k=r.findIndex(c=>/^(date|التاريخ|날짜|견적일)\b/i.test(c));if(k<0)continue;const v=r.slice(k+1).find(Boolean);if(!v)continue;
+    let m=String(v).match(/(\d{4})[-.\/](\d{1,2})[-.\/](\d{1,2})/);let d=m?[m[1],m[2],m[3]]:null;
+    if(!d){const n=+v;if(n>30000&&n<80000){const t=new Date(Date.UTC(1899,11,30)+n*864e5);d=[t.getUTCFullYear(),t.getUTCMonth()+1,t.getUTCDate()]}}
+    if(!d){m=String(v).match(/(\d{1,2})[-\s]([A-Za-z]{3})[A-Za-z]*[-\s,]+(\d{4})/);const MO={jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,oct:10,nov:11,dec:12};if(m&&MO[m[2].toLowerCase()])d=[m[3],MO[m[2].toLowerCase()],m[1]]}
+    if(!d){m=String(v).match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);if(m){const y=m[3].length===2?'20'+m[3]:m[3];d=[y,m[1],m[2]]}}
+    if(d){$('#qbefore').value=`${d[0]}-${String(d[1]).padStart(2,'0')}-${String(d[2]).padStart(2,'0')}`;break}}}
+  const out=[];const num=s=>parseFloat(String(s||'').replace(/[^0-9.\-]/g,''));
+  const mk=(r,price,vendor,label)=>{const desc=r[col.d];if(!desc||!/[A-Za-z؀-ۿ가-힣]/.test(desc)||!isFinite(price)||price<=0||SKIP.test(desc))return;
+    const spec=col.s>=0?r[col.s]:'';const item=(desc+(spec&&!desc.includes(spec)?' '+spec:'')).trim();
+    const cs=col.c>=0?r[col.c].toUpperCase():'';const cur=/IQD|دينار/.test(cs)?'IQD':/USD|\$/.test(cs)?'USD':(dc||(price>=250?'IQD':'USD'));
     const u=col.u>=0?(UNIT_MAP[r[col.u].toLowerCase()]||r[col.u].toUpperCase()):'';
-    out.push(mkItem({item,price,cur,unit:u,qty:col.q>=0?r[col.q]:'',src:fname+' · '+rows[hi][col.d]+' 열'}))});
+    const it=mkItem({item,price,cur,unit:u,qty:col.q>=0?r[col.q]:'',src:fname+' · '+label,codeHint:col.k>=0?r[col.k]:''});if(vendor)it.vendor=vendor;out.push(it)};
+  rows.slice(hi+1).forEach(r=>{
+    if(col.v)col.v.forEach(v=>mk(r,num(r[v.k]),v.vendor.trim(),v.vendor.trim()+' 열'));
+    else mk(r,num(r[col.p]),'',rows[hi][col.d]+' 열')});
   return out;
 }
 // --- 라이브러리 지연 로드 ---
@@ -426,7 +446,7 @@ async function readFile(file){
   else if(n.endsWith('.pdf')||file.type==='application/pdf'){lines=await readPdf(file);items=parseQuoteLines(lines,file.name)}
   else if(file.type.startsWith('image/')){lines=await ocr(file,file.name);items=parseQuoteLines(lines,file.name)}
   else throw new Error(file.name+': 지원하지 않는 형식입니다.');
-  const vd=detectVendor(lines,file.name);items.forEach(it=>it.vendor=vd);return items;
+  const vd=detectVendor(lines,file.name);items.forEach(it=>it.vendor=it.vendor||vd);return items;
 }
 const qStatus=s=>{$('#qstatus').textContent=s};
 async function handleFiles(files){
@@ -479,8 +499,8 @@ $('#qt').value=['Safety Shoes Labor 42\t25000\tIQD\tEA\t50','Fluorescent Lamp 36
 
 let qCmp=null; // 마지막 비교 결과 (엑셀 내보내기용)
 function lastPurchase(ci,unit,useUnit){
-  const sg=$('#qsg').value,cmp=$('#qcmp').value;
-  for(let i=R.length-1;i>=0;i--){const r=R[i];if(r[4]!==ci)continue;if(sg==='bncp'&&isSAB[r[1]])continue;if(sg==='sab'&&!isSAB[r[1]])continue;
+  const sg=$('#qsg').value,cmp=$('#qcmp').value,bd=$('#qbefore').value?+$('#qbefore').value.replace(/-/g,''):0;
+  for(let i=R.length-1;i>=0;i--){const r=R[i];if(r[4]!==ci)continue;if(bd&&r[0]>=bd)continue;if(sg==='bncp'&&isSAB[r[1]])continue;if(sg==='sab'&&!isSAB[r[1]])continue;
     if(useUnit&&unit&&U[r[6]]!==unit)continue;if(cmp!=='all'&&r[7]!==(cmp==='IQD'?1:0))continue;if(pu[i]<=0)continue;return i}
   return -1;
 }
@@ -541,7 +561,7 @@ async function exportQuote(){
   XLSX.writeFile(wb,`견적비교_${today}.xlsx`);qStatus('엑셀 파일을 저장했습니다.');
 }
 $('#qexport').onclick=exportQuote;
-$('#qrun').onclick=runQuote;['#qsg','#qcmp'].forEach(s=>$(s).addEventListener('change',runQuote));
+$('#qrun').onclick=runQuote;['#qsg','#qcmp','#qbefore'].forEach(s=>$(s).addEventListener('change',runQuote));
 renderReview();
 
 /* ---------- 표 머리글 클릭 정렬 (모든 탭 공통) ---------- */
