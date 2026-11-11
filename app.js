@@ -580,7 +580,7 @@ function runQuote(){
         <td class="num">${L?fmtD(L.date):''}${oldL?`<br><span class="chip warn">${Math.floor((lastDate-L.date)/10000)}년 전 — 참고만</span>`:''}</td>
         <td class="r num">${oldL?`<span class="hint">${isFinite(v)?(v>0?'+':'')+f(v,0)+'%':''}</span>`:pctHtml(v)}${!oldL&&isFinite(v)&&(v>=100||v<=-50)?'<br><span class="chip warn">사양·제품 확인</span>':''}</td></tr>`});
     if(tc)c+=`<tr class="totrow"><td colspan="4"><b>최저가 합계</b> <span class="hint">수량이 있는 품목만</span></td><td class="r num"><b>${fUSD(tl)}</b></td><td colspan="5"></td></tr>`;
-    c+=`</tbody></table></div><p class="hint" style="margin:10px 0 0">품목마다 최저가 견적 1건을 최근 실제 구매 단가와 비교합니다. 업체별 단가를 모두 보려면 위의 "업체별 전체"를 누르세요. 엑셀 저장은 항상 업체별 전체 비교표로 저장됩니다.</p>`;
+    c+=`</tbody></table></div><p class="hint" style="margin:10px 0 0">품목마다 최저가 견적 1건을 최근 실제 구매 단가와 비교합니다. 업체별 단가를 모두 보려면 위의 "업체별 전체"를 누르세요. 엑셀로 저장하면 최저가 비교·업체별 비교·견적 원문 3개 시트로 저장됩니다.</p>`;
     $('#qout').innerHTML=c;return}
   let h=`<div class="tbl-wrap"><table><thead><tr><th>품목</th><th>단위</th><th class="r">수량</th><th>최근 구매 업체</th><th class="r">최근 구매 단가 (${CUR})</th><th>최근 구매일</th>${vendors.map(v=>`<th class="r">${esc(v)}<br><span class="hint">단가 (${CUR}) · 최근 구매 대비</span></th>`).join('')}<th>최저 견적</th></tr></thead><tbody>`;
   const tot=vendors.map(()=>0),totCnt=vendors.map(()=>0);
@@ -603,19 +603,126 @@ function runQuote(){
 }
 async function exportQuote(){
   if(!qCmp){qStatus('내보낼 비교 결과가 없습니다.');return}
-  await loadScript('lib/xlsx.full.min.js');
+  qStatus('엑셀 파일을 만드는 중…');
+  try{await loadScript('lib/exceljs.min.js')}catch(e){qStatus('엑셀 모듈을 불러오지 못했습니다: '+e.message);return}
   const {vendors,rows,fx,cur}=qCmp;const today=new Date().toISOString().slice(0,10);
-  const head=['No','자재코드','품명','규격','단위','수량','최근 구매 업체','최근 구매일',`최근 구매 단가(${cur})`];
-  vendors.forEach(v=>{head.push(`${v} 단가(${cur})`);head.push(`${v} 변동%`)});head.push('최저 견적 업체');
-  const aoa=[[`견적 비교표 · BP Bismaya Purchase`],[`작성일 ${today} · 기준 통화 ${cur} · 견적 환산 환율 1 USD = ${fx} IQD · 구매이력 기준일 ${fmtD(lastDate)}`],[],head];
-  rows.forEach((r,k)=>{const lr=r.code!=null?lastRowOf(r.code):null;const L=r.last;
-    const line=[k+1,r.code!=null?C[r.code]:'',lr?N[lr[3]]:r.item,lr?P[lr[5]]:'',r.unit||(L?L.unit:''),r.qty||'',L?L.vendor:'이력 없음',L?fmtD(L.date):'',L?Math.round(L.p*100)/100:''];
-    r.qs.forEach(q=>{line.push(q?Math.round(q.bp*100)/100:'');line.push(q&&L&&L.p>0?Math.round((q.bp/L.p-1)*1000)/10:'')});
-    line.push(r.qs.filter(Boolean).length>1?r.bestV:'');aoa.push(line)});
-  const raw=[['업체','견적 품명','수량','단가','통화','단위','매칭 자재코드','출처']].concat(qItems.filter(x=>x.use).map(x=>[x.vendor,x.item,x.qty,x.price,x.cur,x.unit,x.code>=0?C[x.code]:'',x.src]));
-  const wb=XLSX.utils.book_new();const ws=XLSX.utils.aoa_to_sheet(aoa);ws['!cols']=head.map((h,i)=>({wch:i===2?34:i===3?24:i>=8?14:12}));
-  XLSX.utils.book_append_sheet(wb,ws,'견적비교');XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(raw),'견적원문');
-  XLSX.writeFile(wb,`견적비교_${today}.xlsx`);qStatus('엑셀 파일을 저장했습니다.');
+  const wb=new ExcelJS.Workbook();wb.creator='BP Bismaya Purchase';
+  // ── 공통 스타일
+  const FONT='맑은 고딕',NUM=cur==='IQD'?'#,##0':'#,##0.00',PCT='+0%;-0%;0%';
+  const C_HEAD='FF1F3864',C_SUB='FFD9E1F2',C_BAD='FFF8CBAD',C_WARN='FFFFE699',C_OK='FFC6EFCE',C_GREY='FFEDEDED',C_BEST='FFE2EFDA',C_TOT='FFDDEBF7';
+  const T_BAD='FF9C0006',T_WARN='FF7F6000',T_OK='FF006100',T_GREY='FF7F7F7F';
+  const thin={style:'thin',color:{argb:'FFBFBFBF'}},med={style:'medium',color:{argb:'FF1F3864'}};
+  const box=c=>{c.border={top:thin,left:thin,bottom:thin,right:thin}};
+  const fill=(c,argb)=>{c.fill={type:'pattern',pattern:'solid',fgColor:{argb}}};
+  const font=(c,o={})=>{c.font={name:FONT,size:10,...o}};
+  const tone=v=>!isFinite(v)?null:v>10?[C_BAD,T_BAD]:v>0?[C_WARN,T_WARN]:[C_OK,T_OK];
+  const oldOf=L=>L&&(lastDate-L.date)>=20000;
+  const nameOf=r=>{const lr=r.code!=null?lastRowOf(r.code):null;return{code:r.code!=null?C[r.code]:'',name:lr?N[lr[3]]:r.item,spec:lr?P[lr[5]]:'',ko:lr?koName(lr[3]):''}};
+  const qtyN=r=>{const q=parseFloat(String(r.qty||'').replace(/,/g,''));return isFinite(q)?q:null};
+  function sheetTitle(ws,title,ncol,note){
+    ws.mergeCells(1,1,1,ncol);const t=ws.getCell(1,1);t.value=title;font(t,{size:15,bold:true,color:{argb:C_HEAD}});ws.getRow(1).height=26;
+    ws.mergeCells(2,1,2,ncol);const s=ws.getCell(2,1);s.value=`작성일 Date ${today} · 기준 통화 Currency ${cur} · 환율 FX 1 USD = ${f(fx,0)} IQD · 구매이력 기준일 Purchase data as of ${fmtD(lastDate)}`;font(s,{size:9,color:{argb:'FF595959'}});
+    ws.mergeCells(3,1,3,ncol);const l=ws.getCell(3,1);
+    l.value={richText:[{text:'최근 구매 대비 vs Last Price  ',font:{name:FONT,size:9,bold:true}},
+      {text:' +10% 초과 / over +10% ',font:{name:FONT,size:9,bold:true,color:{argb:T_BAD}}},{text:'  ',font:{name:FONT,size:9}},
+      {text:' 0~+10% ',font:{name:FONT,size:9,bold:true,color:{argb:T_WARN}}},{text:'  ',font:{name:FONT,size:9}},
+      {text:' 같거나 낮음 / same or lower ',font:{name:FONT,size:9,bold:true,color:{argb:T_OK}}},{text:'  ',font:{name:FONT,size:9}},
+      {text:' 회색 = 2년 이상 지난 구매 (참고만) / Grey = purchase 2+ years ago (reference only) ',font:{name:FONT,size:9,italic:true,color:{argb:T_GREY}}},
+      {text:note?'   '+note:'',font:{name:FONT,size:9,color:{argb:'FF595959'}}}]};
+    ws.getRow(3).height=18;
+  }
+  function header(ws,rowNo,cols){
+    const r=ws.getRow(rowNo);r.height=36;
+    cols.forEach((h,i)=>{const c=r.getCell(i+1);c.value=h;font(c,{bold:true,color:{argb:'FFFFFFFF'}});fill(c,C_HEAD);
+      c.alignment={horizontal:'center',vertical:'middle',wrapText:true};c.border={top:med,left:thin,bottom:med,right:thin}});
+  }
+  function pctCell(c,v,old){
+    if(!isFinite(v)){c.value='–';c.alignment={horizontal:'center',vertical:'middle'};return}
+    c.value=v/100;c.numFmt=PCT;c.alignment={horizontal:'center',vertical:'middle'};
+    if(old){font(c,{italic:true,color:{argb:T_GREY}});fill(c,C_GREY);return}
+    const t=tone(v);font(c,{bold:true,color:{argb:t[1]}});fill(c,t[0]);
+  }
+  // ── 시트 1: 최저가 비교 (화면 기본 보기와 동일)
+  const s1=wb.addWorksheet('최저가 비교 Lowest',{views:[{state:'frozen',xSplit:3,ySplit:5}],pageSetup:{orientation:'landscape',paperSize:9,fitToPage:true,fitToWidth:1,fitToHeight:0}});
+  const H1=['No','자재코드\nItem Code','품명 / 규격\nDescription / Spec','단위\nUnit','수량\nQty','최저가 업체\nLowest Bidder','최저 견적 단가\nLowest Unit Price','견적 수\nQuotes','최저가 금액\nLowest Amount','최근 구매 업체\nLast Supplier','최근 구매 단가\nLast Unit Price','최근 구매일\nLast PO Date','최근 구매 대비\nvs Last Price','확인 사항\nRemarks'];
+  s1.columns=[6,13,40,8,9,22,14,9,15,26,14,13,13,30].map(w=>({width:w}));
+  sheetTitle(s1,'견적 비교표 — 품목별 최저가 vs 최근 실구매가  |  Quotation Comparison — Lowest Quote vs Last Purchase Price',H1.length,'');
+  header(s1,5,H1);
+  let rn=6,sum=0,sumN=0,cnt={bad:0,warn:0,ok:0};
+  rows.forEach((r,k)=>{const n=nameOf(r),L=r.last,old=oldOf(L),v=L&&L.p>0?(r.best/L.p-1)*100:NaN,q=qtyN(r),nq=r.qs.filter(Boolean).length;
+    const notes=[];if(!L)notes.push('구매 이력 없음 / No purchase history');if(old){const y=Math.floor((lastDate-L.date)/10000);notes.push(`${y}년 전 구매 — 참고만 / Bought ${y} yr ago — reference only`)}
+    if(L&&r.unit&&L.unit&&L.unit!==r.unit)notes.push(`단위 다름 (최근 구매 ${L.unit}) / Unit differs (last PO ${L.unit})`);if(!old&&isFinite(v)&&(v>=100||v<=-50))notes.push('사양·제품 확인 / Check spec·product');if(r.code==null)notes.push('매칭 코드 없음 / No matching code');
+    if(!old&&isFinite(v)){v>10?cnt.bad++:v>0?cnt.warn++:cnt.ok++}
+    const row=s1.getRow(rn);
+    row.values=[k+1,n.code,null,r.unit||(L?L.unit:''),q??(r.qty||''),r.bestV||'',r.best,nq,q!=null?q*r.best:null,L?L.vendor:'',L?L.p:null,L?fmtD(L.date):'',null,notes.join('\n')];
+    row.getCell(3).value={richText:[{text:n.name,font:{name:FONT,size:10,bold:true}},{text:n.spec?'  '+n.spec:'',font:{name:FONT,size:9,color:{argb:'FF595959'}}},{text:n.ko?'\n'+n.ko:'',font:{name:FONT,size:9,color:{argb:'FF2F5597'}}}]};
+    for(let c=1;c<=H1.length;c++){const x=row.getCell(c);box(x);if(c!==3)font(x);x.alignment={vertical:'middle',wrapText:c===3||c===6||c===10||c===12||c===14,horizontal:[1,4,8,12].includes(c)?'center':undefined}}
+    [7,9,11].forEach(c=>row.getCell(c).numFmt=NUM);row.getCell(5).numFmt='#,##0.##';
+    fill(row.getCell(7),C_BEST);font(row.getCell(7),{bold:true});
+    pctCell(row.getCell(13),v,old);
+    if(notes.length){const x=row.getCell(14);font(x,{size:9,bold:/사양|단위/.test(notes.join()),color:{argb:/사양|단위/.test(notes.join())?T_BAD:'FF595959'}})}
+    if(k%2)for(const c of [1,2,3,4,5,6,8,10,11,12,14])if(!row.getCell(c).fill)fill(row.getCell(c),'FFF7F9FC');
+    row.height=Math.max(n.ko?32:22,notes.length*15+6,Math.ceil(String(r.bestV||'').length/14)*13+8,Math.ceil(String(L?L.vendor:'').length/24)*13+8);
+    if(q!=null){sum+=q*r.best;sumN++}rn++});
+  const tr=s1.getRow(rn);tr.getCell(1).value='합계 / Total';s1.mergeCells(rn,1,rn,8);tr.getCell(9).value=sumN?sum:null;tr.getCell(9).numFmt=NUM;
+  tr.getCell(10).value=`수량이 있는 품목 ${sumN}건 기준 / ${sumN} items with qty`;
+  for(let c=1;c<=H1.length;c++){const x=tr.getCell(c);fill(x,C_TOT);font(x,{bold:true});x.border={top:med,left:thin,bottom:med,right:thin};x.alignment={vertical:'middle',horizontal:c===1?'center':undefined}}
+  tr.height=22;
+  s1.mergeCells(4,1,4,H1.length);const sm=s1.getCell(4,1);
+  sm.value=`요약: 비교 ${rows.length}품목 — 최근 구매보다 10% 초과 ${cnt.bad}건 · 0~10% 상승 ${cnt.warn}건 · 같거나 낮음 ${cnt.ok}건 (2년 이상 지난 구매·이력 없음 제외)\nSummary: ${rows.length} items — over +10%: ${cnt.bad} · 0~+10%: ${cnt.warn} · same or lower: ${cnt.ok} (excl. purchases 2+ yrs old / no history)`;font(sm,{size:10,bold:true});fill(sm,C_SUB);sm.alignment={vertical:'middle',wrapText:true};s1.getRow(4).height=32;
+  s1.autoFilter={from:{row:5,column:1},to:{row:rn-1,column:H1.length}};
+  // ── 시트 2: 업체별 전체 비교
+  const s2=wb.addWorksheet('업체별 비교 By Vendor',{views:[{state:'frozen',xSplit:3,ySplit:6}],pageSetup:{orientation:'landscape',paperSize:9,fitToPage:true,fitToWidth:1,fitToHeight:0}});
+  const base=['No','자재코드\nItem Code','품명 / 규격\nDescription / Spec','단위\nUnit','수량\nQty','최근 구매 업체\nLast Supplier','최근 구매 단가\nLast Unit Price','최근 구매일\nLast PO Date'];
+  const nc=base.length+vendors.length*2+1;
+  s2.columns=[6,13,40,7,9,24,13,12,...vendors.flatMap(()=>[13,12]),20].map(w=>({width:w}));
+  sheetTitle(s2,'견적 비교표 — 업체별 단가 · 최근 구매 대비  |  Quotation Comparison by Vendor',nc,'초록 ✓ = 품목별 최저가 / Green ✓ = lowest quote');
+  // 2단 헤더: 업체명 병합
+  const h5=s2.getRow(5),h6=s2.getRow(6);
+  base.forEach((h,i)=>{s2.mergeCells(5,i+1,6,i+1)});
+  vendors.forEach((v,j)=>{const c0=base.length+1+j*2;s2.mergeCells(5,c0,5,c0+1)});
+  s2.mergeCells(5,nc,6,nc);
+  const hv=(c,val)=>{c.value=val;font(c,{bold:true,color:{argb:'FFFFFFFF'}});fill(c,C_HEAD);c.alignment={horizontal:'center',vertical:'middle',wrapText:true};c.border={top:med,left:thin,bottom:med,right:thin}};
+  base.forEach((h,i)=>hv(h5.getCell(i+1),h));
+  vendors.forEach((v,j)=>{const c0=base.length+1+j*2;hv(h5.getCell(c0),v);hv(h6.getCell(c0),'단가\nUnit Price');hv(h6.getCell(c0+1),'최근 구매 대비\nvs Last Price')});
+  hv(h5.getCell(nc),'최저 견적 업체\nLowest Bidder');h5.height=24;h6.height=32;
+  rn=7;const tot=vendors.map(()=>0),totN=vendors.map(()=>0);
+  rows.forEach((r,k)=>{const n=nameOf(r),L=r.last,old=oldOf(L),q=qtyN(r),multi=r.qs.filter(Boolean).length>1;
+    const row=s2.getRow(rn);
+    row.values=[k+1,n.code,null,r.unit||(L?L.unit:''),q??(r.qty||''),L?L.vendor:'구매 이력 없음 / No history',L?L.p:null,L?fmtD(L.date)+(old?`\n(${Math.floor((lastDate-L.date)/10000)}년 전 / ${Math.floor((lastDate-L.date)/10000)} yr ago)`:''):''];
+    row.getCell(3).value={richText:[{text:n.name,font:{name:FONT,size:10,bold:true}},{text:n.spec?'  '+n.spec:'',font:{name:FONT,size:9,color:{argb:'FF595959'}}},{text:n.ko?'\n'+n.ko:'',font:{name:FONT,size:9,color:{argb:'FF2F5597'}}}]};
+    for(let c=1;c<=nc;c++){const x=row.getCell(c);box(x);if(c!==3)font(x);x.alignment={vertical:'middle',wrapText:c===3||c===6||c===8,horizontal:[1,4,8].includes(c)?'center':undefined}}
+    row.getCell(7).numFmt=NUM;row.getCell(5).numFmt='#,##0.##';
+    if(!L)font(row.getCell(6),{italic:true,color:{argb:T_GREY}});if(old)font(row.getCell(8),{italic:true,color:{argb:T_GREY}});
+    r.qs.forEach((qq,j)=>{const c0=base.length+1+j*2,pc=row.getCell(c0),vc=row.getCell(c0+1);
+      if(!qq){pc.value='–';vc.value='';pc.alignment={horizontal:'center',vertical:'middle'};return}
+      const isB=multi&&qq.bp===r.best;pc.value=qq.bp;pc.numFmt=isB?NUM+'" ✓"':NUM;
+      if(isB){fill(pc,C_BEST);font(pc,{bold:true,color:{argb:T_OK}})}
+      pctCell(vc,L&&L.p>0?(qq.bp/L.p-1)*100:NaN,old);
+      if(q!=null){tot[j]+=q*qq.bp;totN[j]++}});
+    const bc=row.getCell(nc);bc.value=multi?r.bestV:'';if(multi)font(bc,{bold:true,color:{argb:T_OK}});
+    row.height=n.ko?32:22;rn++});
+  const t2=s2.getRow(rn);t2.getCell(1).value='합계 (수량 × 단가) / Total (Qty × Unit Price)';s2.mergeCells(rn,1,rn,base.length);
+  vendors.forEach((v,j)=>{const c=t2.getCell(base.length+1+j*2);c.value=totN[j]?tot[j]:'–';c.numFmt=NUM;
+    const d=t2.getCell(base.length+2+j*2);d.value=totN[j]?`${totN[j]}품목 / items`:'';});
+  const mn=Math.min(...tot.filter((x,j)=>totN[j]));
+  for(let c=1;c<=nc;c++){const x=t2.getCell(c);fill(x,C_TOT);font(x,{bold:true,size:c>base.length&&(c-base.length)%2===0?9:10});x.border={top:med,left:thin,bottom:med,right:thin};x.alignment={vertical:'middle',horizontal:c===1?'center':undefined}}
+  vendors.forEach((v,j)=>{if(totN[j]&&tot[j]===mn&&vendors.length>1){const c=t2.getCell(base.length+1+j*2);fill(c,C_OK);font(c,{bold:true,color:{argb:T_OK}})}});
+  t2.height=22;
+  s2.mergeCells(4,1,4,nc);const n2=s2.getCell(4,1);n2.value='업체별 합계는 그 업체가 견적을 낸 품목만 더한 값이라, 견적 품목 수가 다르면 합계를 그대로 비교할 수 없습니다. / Vendor totals include only the items each vendor quoted; totals are not directly comparable when the item count differs.';font(n2,{size:9,color:{argb:'FF595959'}});
+  s2.autoFilter={from:{row:6,column:1},to:{row:rn-1,column:nc}};
+  // ── 시트 3: 견적 원문
+  const s3=wb.addWorksheet('견적 원문 Raw Quotes',{views:[{state:'frozen',ySplit:1}]});
+  const H3=['업체\nVendor','견적 품명\nQuoted Item','수량\nQty','단가\nUnit Price','통화\nCurrency','단위\nUnit','매칭 자재코드\nMatched Code','출처\nSource'];
+  s3.columns=[24,48,9,13,7,7,14,30].map(w=>({width:w}));header(s3,1,H3);
+  qItems.filter(x=>x.use).forEach((x,i)=>{const row=s3.getRow(i+2);row.values=[x.vendor,x.item,x.qty,x.price,x.cur,x.unit,x.code>=0?C[x.code]:'',x.src];
+    for(let c=1;c<=H3.length;c++){const y=row.getCell(c);box(y);font(y);y.alignment={vertical:'middle',wrapText:c===2}}row.getCell(4).numFmt='#,##0.##';
+    if(i%2)for(let c=1;c<=H3.length;c++)fill(row.getCell(c),'FFF7F9FC')});
+  s3.autoFilter={from:{row:1,column:1},to:{row:1,column:H3.length}};
+  const buf=await wb.xlsx.writeBuffer();
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));
+  a.download=`견적비교_${today}.xlsx`;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),4000);
+  qStatus('엑셀 파일을 저장했습니다 (최저가 비교 · 업체별 비교 · 견적 원문 3개 시트, 한/영 병기).');
 }
 $('#qexport').onclick=exportQuote;
 $('#qrun').onclick=runQuote;['#qsg','#qcmp','#qbefore'].forEach(s=>$(s).addEventListener('change',runQuote));
