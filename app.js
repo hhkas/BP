@@ -317,7 +317,7 @@ function parseTextLines(text){
   });
 }
 // 견적서 줄 → 품목 (OCR · PDF 텍스트 공통)
-const SKIP=/(\bco\.|company|trading|\bltd\b|\bllc\b|شركة|sub\s*-?total|grand\s*total|^total|total\s*amount|net\s*amount|vat|tax|discount|validity|payment|delivery|tel|phone|mobile|e-?mail|www\.|p\.?o\.?\s*box|quotation\s*no|date|المجموع|الاجمالي|الإجمالي|المبلغ|الخصم|التاريخ|هاتف)/i;
+const SKIP=/(\bco\.|company|trading|\bltd\b|\bllc\b|شركة|sub\s*-?total|grand\s*-?\s*t[o0]?[ta]{1,2}l|^total|total\s*amount|net\s*amount|\bvat\b|\btax\b|discount|validity|payment\s*(term|:)|\bdelivery\s*(term|time|:)|\btel\b|\bphone|\bmob(ile)?\b|\bfax\b|e-?mail|\S+@\S+\.[a-z]{2,}|gmail|yahoo|hotmail|www\.|p\.?o\.?\s*box|quotation\s*no|\bdate\b|scanned\s*with|camscanner|المجموع|الاجمالي|الإجمالي|المبلغ|الخصم|التاريخ|هاتف)/i;
 function docCurrency(text){const t=text.toLowerCase();const m=t.match(/currency\s*[:：]?\s*(iqd|usd|dinar|dollar)/);if(m)return /iqd|dinar/.test(m[1])?'IQD':'USD';
   const iq=(t.match(/iqd|i\.q\.d|dinar|دينار|د\.ع/g)||[]).length,us=(t.match(/usd|us\s*\$|dollar|دولار/g)||[]).length;return iq>us?'IQD':us>iq?'USD':null}
 const lev=(a,b)=>{const d=[...Array(b.length+1).keys()];for(let i=1;i<=a.length;i++){let p=d[0];d[0]=i;for(let j=1;j<=b.length;j++){const t=d[j];d[j]=Math.min(d[j]+1,d[j-1]+1,p+(a[i-1]===b[j-1]?0:1));p=t}}return d[b.length]};
@@ -334,7 +334,7 @@ function parseQuoteLines(lines,fname){
     const nums=[];let m;NUM.lastIndex=0;while((m=NUM.exec(l))){nums.push({v:parseFloat(m[0].replace(/,/g,'')),s:m[0],off:m.index,end:m.index+m[0].length})}
     if(!nums.length||(l.match(/[A-Za-z؀-ۿ]/g)||[]).length<3)return;
     // 사양 숫자(36W, 8mm, 2" 등)는 가격 후보에서 제외
-    let cand=nums.filter(n=>{const after=l.slice(n.end,n.end+4),before=l.slice(Math.max(0,n.off-2),n.off);return !(/^\s?(mm|cm|w\b|v\b|kg\b|kw|hp|ah\b|a\b|ltr\b|l\b|m\b|m2|m3|"|inch|t\b|x\b|×|\*)/i.test(after)||/[x×*]\s?$/.test(before)||/[A-Za-z]$/.test(before))});
+    let cand=nums.filter(n=>{const after=l.slice(n.end,n.end+4),before=l.slice(Math.max(0,n.off-2),n.off);return !(/^\s?(mm|cm|w\b|v\b|kg\b|kw|hp|ah\b|a\b|ltr\b|l\b|m\b|m2|m3|"|inch|tons?|t\b|x\b|×|\*)/i.test(after)||/^0\d{8,}$/.test(n.s)||/[x×*]\s?$/.test(before)||/[A-Za-z]$/.test(before))});
     let start=0;
     if(cand.length>=2&&cand[0].off<4&&Number.isInteger(cand[0].v)&&cand[0].v<=300){start=cand[0].end;cand=cand.slice(1)} // 순번
     if(!cand.length)return;
@@ -347,18 +347,25 @@ function parseQuoteLines(lines,fname){
         if(ok(a,b*1000,c)){qty=a;price=b*1000;first=cand[i];break outer}}} // OCR이 4,200을 4.2로 읽은 경우
     if(isNaN(price)){
       if(cand.length>=3){price=cand[cand.length-2].v;qty=cand[cand.length-3].v;first=cand[cand.length-3]}
-      else if(cand.length===2){const [a,b]=cand;if(Number.isInteger(a.v)&&a.v<=b.v){qty=a.v;price=b.v;first=a}else{price=a.v;first=a}}
+      else if(cand.length===2){const [a,b]=cand;const r=b.v/a.v;
+        // 단가·합계만 읽힌 경우(수량을 OCR이 놓침): 합계가 단가의 정수배면 수량 = 합계 ÷ 단가
+        if(a.v>=100&&b.v>a.v&&Math.abs(r-Math.round(r))<0.01&&r<=100000){price=a.v;qty=Math.round(r);first=a}
+        else if(Number.isInteger(a.v)&&a.v<=b.v){qty=a.v;price=b.v;first=a}else{price=a.v;first=a}}
       else{price=cand[0].v;first=cand[0]}
     }
     let desc=l.slice(start,first.off);
     let unit='';const um=desc.match(UNITW)||l.slice(first.off).match(UNITW);
     if(um){unit=UNIT_MAP[um[1].toLowerCase()]||um[1].toUpperCase();desc=desc.replace(new RegExp('\\b'+um[1]+'\\b\\s*$','i'),'')}
     desc=desc.replace(/^[\s.\-:#)]+|[\s.\-:,(»«>]+$/g,'').replace(/\s+/g,' ').trim();
+    // 단위 뒤에 붙은 잡음(EA S0, EA § 등)과 순번 OCR 잔재(a, I, |) 제거
+    {const w=desc.split(' ');for(let k=Math.max(1,w.length-3);k<w.length;k++)if(UNITW.test(w[k])&&new RegExp('^'+UNITW.source+'$','i').test(w[k])){if(!unit){const u=w[k].toLowerCase();unit=UNIT_MAP[u]||w[k].toUpperCase()}desc=w.slice(0,k).join(' ');break}}
+    desc=desc.replace(/^(?:[a-zIl|!]|\d{1,2}[.)]?)\s+(?=[A-Z0-9])/,'').replace(/[\s|,.;:§]+$/,'').trim();
     // OCR로 깨진 단위 단어(Paw, pes, Rol 등)가 품명 끝에 붙은 경우 제거
     for(let g=0;g<2;g++){const mm=desc.match(/(?:^|\s)[»>|]*\s*([A-Za-z]{2,5})$/);if(!mm)break;const w0=mm[1],w=w0.toLowerCase();if(/^[A-Z]{2,4}$/.test(w0)&&!UNIT_FUZZ.includes(w))break;
       const hit=UNIT_FUZZ.find(u=>u===w||lev(w,u)<=1&&Math.abs(w.length-u.length)<=1||(w.length<=3&&u.length>=4&&w[0]===u[0]&&lev(w,u)<=2));
       if(!hit)break;if(!unit)unit=UNIT_MAP[hit]||hit.toUpperCase();desc=desc.slice(0,desc.length-mm[0].length).replace(/[\s»>|]+$/,'').trim()}
     if((desc.match(/[A-Za-z؀-ۿ]/g)||[]).length<3)return;
+    if(!(price>0)||price>=1e9)return; // 전화번호·계좌번호 등
     const lc=/iqd|دينار/i.test(l)?'IQD':/usd|\$/i.test(l)?'USD':null;
     out.push({item:desc,price,lc,unit,qty,src:fname+' · '+raw.trim().slice(0,90)});
   });
@@ -455,7 +462,8 @@ async function readPdf(file){
 function detectVendor(lines,fname){
   for(const l0 of lines.slice(0,15)){const l=String(l0).replace(/\s+/g,' ').trim();
     if(/(\bco\b\.?|company|trading|\bllc\b|\bltd\b|\best\b\.?|enterprise|group|شركة|مؤسسة)/i.test(l)&&!/(hanwha|bncp|quotation\s*no|to\s*:)/i.test(l)){
-      const en=l.replace(/[\u0600-\u06ff]+/g,' ').replace(/[^A-Za-z0-9&.,()\-' ]/g,' ').replace(/\s+/g,' ').trim();return (en.length>=4?en:l).slice(0,40)}}
+      let en=l.replace(/[\u0600-\u06ff]+/g,' ').replace(/[^A-Za-z0-9&.,()\-' ]/g,' ').replace(/\s+/g,' ').trim();
+      for(const m of en.matchAll(/\b(?:co|company|corp|ltd|llc|est|trading|group|enterprises?)\b\.?/gi)){const pre=en.slice(0,m.index);if(pre.replace(/[^A-Za-z]/g,'').length>=4){en=en.slice(0,m.index+m[0].length);break}}en=en.replace(/[\s\-.,]+$/,'');return (en.length>=4?en:l).slice(0,40)}}
   return fname?fname.replace(/\.[^.]+$/,'').slice(0,40):'';
 }
 async function readFile(file){
